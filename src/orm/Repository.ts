@@ -1,4 +1,4 @@
-import { getTableName } from "./decorators.ts";
+import { getTableName, columnMetadata } from "./decorators.ts";
 import type { BaseEntity, EntityClass, SQLiteDB } from "./types.ts";
 
 export class Repository<T extends BaseEntity = BaseEntity> {
@@ -11,14 +11,18 @@ export class Repository<T extends BaseEntity = BaseEntity> {
     return getTableName(this.entityClass);
   }
 
-  private mapToEntity(row: unknown): T {
+  private get validColumns() {
+    const cols = columnMetadata.get(this.entityClass);
+    if (!cols) return [];
+    return cols.map((c) => c.propertyKey);
+  }
+
+  private mapToEntity(row: unknown) {
     if (!row || typeof row !== "object") {
       throw new Error(`Query returned invalid row: ${row}`);
     }
-
     const entity = new this.entityClass();
     Object.assign(entity, row);
-
     return entity;
   }
 
@@ -32,14 +36,20 @@ export class Repository<T extends BaseEntity = BaseEntity> {
       .prepare(`SELECT * FROM ${this.tableName} WHERE id = ?`)
       .get(id);
 
-    if (!row) return undefined;
-    return this.mapToEntity(row);
+    return row ? this.mapToEntity(row) : undefined;
   }
 
   create(data: Partial<Omit<T, "id">>) {
-    const entries = Object.entries(data);
+    const validKeys = new Set(this.validColumns);
 
-    const validEntries = entries.filter(([_, v]) => v !== undefined);
+    const entries = Object.entries(data);
+    const validEntries = entries.filter(([k, v]) => {
+      return v !== undefined && validKeys.has(k);
+    });
+
+    if (validEntries.length === 0) {
+      throw new Error("No valid columns provided for insert");
+    }
 
     const keys = validEntries.map(([k]) => k);
     const values = validEntries.map(([_, v]) => v);
@@ -55,10 +65,14 @@ export class Repository<T extends BaseEntity = BaseEntity> {
   }
 
   update(id: number | string, data: Partial<Omit<T, "id">>) {
-    const entries = Object.entries(data).filter(([_, v]) => v !== undefined);
+    const validKeys = new Set(this.validColumns);
+
+    const entries = Object.entries(data).filter(([k, v]) => {
+      return v !== undefined && validKeys.has(k);
+    });
 
     if (entries.length === 0) {
-      throw new Error("No data provided for update");
+      throw new Error("No valid data provided for update");
     }
 
     const setClause = entries.map(([k]) => `${k} = ?`).join(", ");
