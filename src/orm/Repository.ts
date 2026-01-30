@@ -1,0 +1,80 @@
+import { getTableName } from "./decorators.ts";
+import type { BaseEntity, EntityClass, SQLiteDB } from "./types.ts";
+
+export class Repository<T extends BaseEntity = BaseEntity> {
+  constructor(
+    private db: SQLiteDB,
+    private entityClass: EntityClass<T>
+  ) {}
+
+  private get tableName() {
+    return getTableName(this.entityClass);
+  }
+
+  private mapToEntity(row: unknown): T {
+    if (!row || typeof row !== "object") {
+      throw new Error(`Query returned invalid row: ${row}`);
+    }
+
+    const entity = new this.entityClass();
+    Object.assign(entity, row);
+
+    return entity;
+  }
+
+  findAll() {
+    const rows = this.db.prepare(`SELECT * FROM ${this.tableName}`).all();
+    return rows.map((row) => this.mapToEntity(row));
+  }
+
+  findById(id: number | string) {
+    const row = this.db
+      .prepare(`SELECT * FROM ${this.tableName} WHERE id = ?`)
+      .get(id);
+
+    if (!row) return undefined;
+    return this.mapToEntity(row);
+  }
+
+  create(data: Partial<Omit<T, "id">>) {
+    const entries = Object.entries(data);
+
+    const validEntries = entries.filter(([_, v]) => v !== undefined);
+
+    const keys = validEntries.map(([k]) => k);
+    const values = validEntries.map(([_, v]) => v);
+
+    const placeholders = keys.map(() => "?").join(", ");
+    const columns = keys.join(", ");
+
+    const stmt = this.db.prepare(
+      `INSERT INTO ${this.tableName} (${columns}) VALUES (${placeholders})`
+    );
+
+    return stmt.run(...values);
+  }
+
+  update(id: number | string, data: Partial<Omit<T, "id">>) {
+    const entries = Object.entries(data).filter(([_, v]) => v !== undefined);
+
+    if (entries.length === 0) {
+      throw new Error("No data provided for update");
+    }
+
+    const setClause = entries.map(([k]) => `${k} = ?`).join(", ");
+    const values = entries.map(([_, v]) => v);
+    values.push(id);
+
+    const stmt = this.db.prepare(
+      `UPDATE ${this.tableName} SET ${setClause} WHERE id = ?`
+    );
+
+    return stmt.run(...values);
+  }
+
+  delete(id: number | string) {
+    return this.db
+      .prepare(`DELETE FROM ${this.tableName} WHERE id = ?`)
+      .run(id);
+  }
+}
