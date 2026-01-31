@@ -1,0 +1,2 @@
+*.http linguist-language=HTTP
+*.rest linguist-language=HTTP
