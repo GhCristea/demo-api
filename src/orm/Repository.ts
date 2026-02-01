@@ -41,7 +41,7 @@ export class Repository<T extends BaseEntity = BaseEntity> {
     return rows.map(this.mapToEntity);
   }
 
-  findById(id: number | string) {
+  findById(id: number | bigint) {
     const row = this.db
       .prepare(`SELECT * FROM ${this.tableName} WHERE id = ?`)
       .get(id);

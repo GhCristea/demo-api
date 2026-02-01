@@ -3,6 +3,14 @@ import { AppDataSource } from "../data-source/index.ts";
 import { Item } from "../entities/Item.ts";
 import { BadRequestError, NotFoundError } from "../errors/HttpError.ts";
 
+const parseId = (id: string): number => {
+  const parsed = Number(id);
+  if (isNaN(parsed) || !Number.isInteger(parsed)) {
+    throw new BadRequestError("Invalid ID format");
+  }
+  return parsed;
+};
+
 const isObject = (value: unknown): value is object => {
   return typeof value === "object" && value !== null;
 };
@@ -42,7 +50,8 @@ itemsRouter.get("/", (req, res, next) => {
 
 itemsRouter.get("/:id", (req, res, next) => {
   try {
-    const item = AppDataSource.getRepository(Item).findById(req.params.id);
+    const id = parseId(req.params.id);
+    const item = AppDataSource.getRepository(Item).findById(id);
     if (!item) {
       throw new NotFoundError(`Item with id ${req.params.id} not found`);
     }
@@ -59,12 +68,16 @@ itemsRouter.post("/", (req, res, next) => {
 
     if (Array.isArray(body)) {
       const results = AppDataSource.transaction(() => {
-        return body.map((item) => repo.create(parseObject(item)));
+        return body.map((item) => {
+          const res = repo.create(parseObject(item));
+          return repo.findById(res.lastInsertRowid);
+        });
       });
       res.status(201).json(results);
     } else {
       const result = repo.create(parseObject(body));
-      res.status(201).json(result);
+      const newItem = repo.findById(result.lastInsertRowid);
+      res.status(201).json(newItem);
     }
   } catch (err) {
     next(err);
