@@ -1,6 +1,8 @@
-import { getTableName, columnMetadata } from "./decorators.ts";
+import { getTableName, getColumnMetadata } from "./decorators.ts";
 import type { BaseEntity, EntityClass, SQLiteDB } from "./types.ts";
 import { QueryBuilder } from "./QueryBuilder.ts";
+import { validate } from "./validation.ts";
+import { ValidationError } from "../errors/HttpError.ts";
 
 export class Repository<T extends BaseEntity = BaseEntity> {
   constructor(
@@ -17,8 +19,7 @@ export class Repository<T extends BaseEntity = BaseEntity> {
   }
 
   private get validColumns() {
-    const cols = columnMetadata.get(this.entityClass);
-    if (!cols) return [];
+    const cols = getColumnMetadata(this.entityClass);
     return cols.map((c) => c.propertyKey);
   }
 
@@ -31,7 +32,7 @@ export class Repository<T extends BaseEntity = BaseEntity> {
     return entity;
   };
 
-  getQuery(): QueryBuilder<T> {
+  getQuery() {
     return new QueryBuilder<T>(this.db, this.tableName, this.mapToEntity);
   }
 
@@ -49,6 +50,11 @@ export class Repository<T extends BaseEntity = BaseEntity> {
   }
 
   create(data: Partial<Omit<T, "id">>) {
+    const errors = validate(this.entityClass, data, false);
+    if (errors.length > 0) {
+      throw new ValidationError(errors);
+    }
+
     const validKeys = new Set(this.validColumns);
 
     const entries = Object.entries(data);
@@ -74,6 +80,11 @@ export class Repository<T extends BaseEntity = BaseEntity> {
   }
 
   update(id: number | string, data: Partial<Omit<T, "id">>) {
+    const errors = validate(this.entityClass, data, true);
+    if (errors.length > 0) {
+      throw new ValidationError(errors);
+    }
+
     const validKeys = new Set(this.validColumns);
 
     const entries = Object.entries(data).filter(([k, v]) => {

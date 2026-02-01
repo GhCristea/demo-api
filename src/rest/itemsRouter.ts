@@ -31,9 +31,7 @@ itemsRouter.get("/", (req, res, next) => {
       query = query.where((f) => f.contains("name", search));
     }
 
-    if (isString(limit)) {
-      query = query.limit(Number(limit));
-    }
+    query = query.limit((isString(limit) && Number(limit)) || 100);
 
     const items = query.getMany();
     res.json(items);

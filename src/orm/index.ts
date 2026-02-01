@@ -1,7 +1,7 @@
 import Db from "better-sqlite3";
 import type { BaseEntity, EntityClass, SQLiteDB } from "./types.ts";
 import { Repository } from "./Repository.ts";
-import { columnMetadata, getTableName } from "./decorators.ts";
+import { getColumnMetadata, getTableName } from "./decorators.ts";
 
 interface Config {
   dbPath: string;
@@ -28,9 +28,9 @@ export class DataSource {
     return new Promise<void>((resolve) => {
       this.entities.forEach((entity) => {
         const tableName = getTableName(entity);
-        const columns = columnMetadata.get(entity);
+        const columns = getColumnMetadata(entity);
 
-        if (!columns || columns.length === 0 || !tableName) {
+        if (columns.length === 0 || !tableName) {
           throw new Error(`Entity ${entity.name} has no columns defined.`);
         }
 

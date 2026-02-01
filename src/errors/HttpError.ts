@@ -19,3 +19,10 @@ export class BadRequestError extends HttpError {
     super(400, message);
   }
 }
+
+export class ValidationError extends BadRequestError {
+  constructor(public errors: string[]) {
+    super("Validation Failed");
+    this.name = "ValidationError";
+  }
+}

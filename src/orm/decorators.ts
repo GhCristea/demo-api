@@ -1,45 +1,56 @@
-import type { EntityClass } from "./types.ts";
+import "reflect-metadata";
+import type { EntityClass, Target } from "./types.ts";
 
-type Target<T extends EntityClass = EntityClass> = InstanceType<T>;
-interface ColumnDefinition {
+export const TABLE_NAME_KEY = "orm:tableName";
+export const COLUMNS_KEY = "orm:columns";
+
+export interface ColumnMetadata {
   propertyKey: string;
-  type: "INTEGER" | "TEXT" | "REAL" | "BLOB";
+  type: string;
+
   isPrimary?: boolean;
-  isNullable?: boolean;
 }
 
-export const columnMetadata = new WeakMap<EntityClass, ColumnDefinition[]>();
-const tableMetadata = new WeakMap<EntityClass, string>();
+export function getTableName(target: EntityClass): string | undefined {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+  return Reflect.getMetadata(TABLE_NAME_KEY, target);
+}
+
+export function getColumnMetadata(target: EntityClass): ColumnMetadata[] {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+  return Reflect.getMetadata(COLUMNS_KEY, target) ?? [];
+}
 
 export function Entity(tableName: string) {
   return function (constructor: EntityClass) {
-    tableMetadata.set(constructor, tableName);
+    Reflect.defineMetadata(TABLE_NAME_KEY, tableName, constructor);
   };
 }
 
-export function getTableName(entity: EntityClass) {
-  return tableMetadata.get(entity);
-}
-
-function addColumnMetadata(target: Target, definition: ColumnDefinition) {
-  const constructor = target.constructor as EntityClass;
-  const columns = columnMetadata.get(constructor) ?? [];
-  columns.push(definition);
-  columnMetadata.set(constructor, columns);
-}
-
-export function Column(type: "INTEGER" | "TEXT" | "REAL" = "TEXT") {
+export function Column() {
   return function (target: Target, propertyKey: string) {
-    addColumnMetadata(target, { propertyKey, type });
+    const constructor = target.constructor as EntityClass;
+    const columns = getColumnMetadata(constructor);
+
+    const type =
+      (
+        Reflect.getMetadata(
+          "design:type",
+          target,
+          propertyKey
+        ) as EntityClass | null
+      )?.name.toLowerCase() ?? "text";
+
+    columns.push({ propertyKey, type });
+    Reflect.defineMetadata(COLUMNS_KEY, columns, constructor);
   };
 }
 
 export function PrimaryGeneratedColumn() {
   return function (target: Target, propertyKey: string) {
-    addColumnMetadata(target, {
-      propertyKey,
-      type: "INTEGER",
-      isPrimary: true
-    });
+    const constructor = target.constructor as EntityClass;
+    const columns = getColumnMetadata(constructor);
+    columns.push({ propertyKey, type: "INTEGER", isPrimary: true });
+    Reflect.defineMetadata(COLUMNS_KEY, columns, constructor);
   };
 }

@@ -6,4 +6,8 @@ export interface BaseEntity {
 
 export type EntityClass<T extends BaseEntity = BaseEntity> = new () => T;
 
+export type Target<T extends BaseEntity = BaseEntity> = InstanceType<
+  EntityClass<T>
+>;
+
 export type SQLiteDB = Database;

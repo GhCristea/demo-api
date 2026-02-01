@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { mapDbError } from "../orm/dbErrorMapper.ts";
-import { HttpError } from "../errors/HttpError.ts";
+import { HttpError, ValidationError } from "../errors/HttpError.ts";
 
 export function errorHandler(
   err: unknown,
@@ -9,6 +9,16 @@ export function errorHandler(
   _next: NextFunction
 ) {
   const httpError = mapDbError(err);
+
+  if (err instanceof ValidationError) {
+    res.status(400).json({
+      status: "error",
+      statusCode: 400,
+      message: "Validation Failed",
+      errors: err.errors
+    });
+    return;
+  }
 
   if (httpError instanceof HttpError) {
     res.status(httpError.statusCode).json({
