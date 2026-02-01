@@ -8,7 +8,11 @@ export class Repository<T extends BaseEntity = BaseEntity> {
   ) {}
 
   private get tableName() {
-    return getTableName(this.entityClass);
+    const tableName = getTableName(this.entityClass);
+    if (!tableName) {
+      throw new Error(`Entity ${this.entityClass.name} has no table name.`);
+    }
+    return tableName;
   }
 
   private get validColumns() {
@@ -19,7 +23,7 @@ export class Repository<T extends BaseEntity = BaseEntity> {
 
   private mapToEntity(row: unknown) {
     if (!row || typeof row !== "object") {
-      throw new Error(`Query returned invalid row: ${row}`);
+      throw new Error(`Query returned invalid row: ${String(row)}`);
     }
     const entity = new this.entityClass();
     Object.assign(entity, row);

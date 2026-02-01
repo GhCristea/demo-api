@@ -30,7 +30,7 @@ export class DataSource {
         const tableName = getTableName(entity);
         const columns = columnMetadata.get(entity);
 
-        if (!columns || columns.length === 0) {
+        if (!columns || columns.length === 0 || !tableName) {
           throw new Error(`Entity ${entity.name} has no columns defined.`);
         }
 

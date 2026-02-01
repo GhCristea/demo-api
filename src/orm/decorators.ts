@@ -23,7 +23,7 @@ export function getTableName(entity: EntityClass) {
 
 function addColumnMetadata(target: Target, definition: ColumnDefinition) {
   const constructor = target.constructor as EntityClass;
-  const columns = columnMetadata.get(constructor) || [];
+  const columns = columnMetadata.get(constructor) ?? [];
   columns.push(definition);
   columnMetadata.set(constructor, columns);
 }

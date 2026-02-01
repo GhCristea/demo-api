@@ -1,7 +1,18 @@
 import { Router } from "express";
 import { AppDataSource } from "../data-source/index.ts";
 import { Item } from "../entities/Item.ts";
-import { NotFoundError } from "../errors/HttpError.ts";
+import { BadRequestError, NotFoundError } from "../errors/HttpError.ts";
+
+const isObject = (value: unknown): value is object => {
+  return typeof value === "object" && value !== null;
+};
+
+const parseObject = (value: unknown): object => {
+  if (!isObject(value)) {
+    throw new BadRequestError();
+  }
+  return value;
+};
 
 export const itemsRouter = Router();
 
@@ -28,14 +39,14 @@ itemsRouter.get("/:id", (req, res, next) => {
 
 itemsRouter.post("/", (req, res, next) => {
   try {
+    const body = parseObject(req.body);
     const repo = AppDataSource.getRepository(Item);
-    const body = req.body;
 
     if (Array.isArray(body)) {
-      const results = body.map((item) => repo.create(item));
+      const results = body.map((item) => repo.create(parseObject(item)));
       res.status(201).json(results);
     } else {
-      const result = repo.create(body);
+      const result = repo.create(parseObject(body));
       res.status(201).json(result);
     }
   } catch (err) {
@@ -45,9 +56,10 @@ itemsRouter.post("/", (req, res, next) => {
 
 itemsRouter.put("/:id", (req, res, next) => {
   try {
+    const body = parseObject(req.body);
     const result = AppDataSource.getRepository(Item).update(
       req.params.id,
-      req.body
+      body
     );
     if (result.changes === 0) {
       throw new NotFoundError();
