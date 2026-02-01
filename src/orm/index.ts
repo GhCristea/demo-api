@@ -20,6 +20,10 @@ export class DataSource {
     });
     this.entities = config.entities;
 
+    this.db.pragma("journal_mode = WAL");
+    this.db.pragma("foreign_keys = ON");
+    this.db.pragma("synchronous = NORMAL");
+
     this.entities.forEach((entity) => {
       if (!getTableName(entity)) {
         throw new Error(`Class ${entity.name} is missing @Entity decorator.`);
