@@ -7,6 +7,10 @@ const isObject = (value: unknown): value is object => {
   return typeof value === "object" && value !== null;
 };
 
+const isString = (value: unknown): value is string => {
+  return typeof value === "string";
+};
+
 const parseObject = (value: unknown): object => {
   if (!isObject(value)) {
     throw new BadRequestError();
@@ -16,9 +20,22 @@ const parseObject = (value: unknown): object => {
 
 export const itemsRouter = Router();
 
-itemsRouter.get("/", (_req, res, next) => {
+itemsRouter.get("/", (req, res, next) => {
   try {
-    const items = AppDataSource.getRepository(Item).findAll();
+    const repo = AppDataSource.getRepository(Item);
+    const { search, limit } = req.query;
+
+    let query = repo.getQuery();
+
+    if (isString(search)) {
+      query = query.where((f) => f.contains("name", search));
+    }
+
+    if (isString(limit)) {
+      query = query.limit(Number(limit));
+    }
+
+    const items = query.getMany();
     res.json(items);
   } catch (err) {
     next(err);

@@ -1,5 +1,6 @@
 import { getTableName, columnMetadata } from "./decorators.ts";
 import type { BaseEntity, EntityClass, SQLiteDB } from "./types.ts";
+import { QueryBuilder } from "./QueryBuilder.ts";
 
 export class Repository<T extends BaseEntity = BaseEntity> {
   constructor(
@@ -21,18 +22,22 @@ export class Repository<T extends BaseEntity = BaseEntity> {
     return cols.map((c) => c.propertyKey);
   }
 
-  private mapToEntity(row: unknown) {
+  public mapToEntity = (row: unknown): T => {
     if (!row || typeof row !== "object") {
       throw new Error(`Query returned invalid row: ${String(row)}`);
     }
     const entity = new this.entityClass();
     Object.assign(entity, row);
     return entity;
+  };
+
+  getQuery(): QueryBuilder<T> {
+    return new QueryBuilder<T>(this.db, this.tableName, this.mapToEntity);
   }
 
   findAll() {
     const rows = this.db.prepare(`SELECT * FROM ${this.tableName}`).all();
-    return rows.map((row) => this.mapToEntity(row));
+    return rows.map(this.mapToEntity);
   }
 
   findById(id: number | string) {
