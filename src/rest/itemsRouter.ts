@@ -60,7 +60,9 @@ itemsRouter.post("/", (req, res, next) => {
     const repo = AppDataSource.getRepository(Item);
 
     if (Array.isArray(body)) {
-      const results = body.map((item) => repo.create(parseObject(item)));
+      const results = AppDataSource.transaction(() => {
+        return body.map((item) => repo.create(parseObject(item)));
+      });
       res.status(201).json(results);
     } else {
       const result = repo.create(parseObject(body));

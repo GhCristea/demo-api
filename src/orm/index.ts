@@ -49,6 +49,11 @@ export class DataSource {
     });
   }
 
+  public transaction<T>(fn: () => T): T {
+    const txn = this.db.transaction(fn);
+    return txn();
+  }
+
   getRepository<T extends BaseEntity>(entityClass: EntityClass<T>) {
     if (!this.repositories.has(entityClass)) {
       if (!this.entities.includes(entityClass)) {
