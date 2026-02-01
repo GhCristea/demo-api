@@ -16,5 +16,6 @@ if (!existsSync(dbDir)) {
 
 export const AppDataSource = new DataSource({
   dbPath: dbPath,
-  entities: [Item]
+  entities: [Item],
+  logging: process.env.NODE_ENV === "development"
 });
