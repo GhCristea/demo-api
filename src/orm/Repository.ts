@@ -1,13 +1,12 @@
-import { getTableName, getColumnMetadata } from "./decorators.ts";
-import type { BaseEntity, EntityClass, SQLiteDB } from "./types.ts";
+import { getTableName } from "./decorators.ts";
+import type { BaseEntity, Constructor, SQLiteDB } from "./types.ts";
 import { QueryBuilder } from "./QueryBuilder.ts";
-import { validate } from "./validation.ts";
-import { ValidationError } from "../errors/HttpError.ts";
+import { getSchema } from "./schemaFactory.ts";
 
 export class Repository<T extends BaseEntity = BaseEntity> {
   constructor(
     private db: SQLiteDB,
-    private entityClass: EntityClass<T>
+    private entityClass: Constructor<T>
   ) {}
 
   private get tableName() {
@@ -16,11 +15,6 @@ export class Repository<T extends BaseEntity = BaseEntity> {
       throw new Error(`Entity ${this.entityClass.name} has no table name.`);
     }
     return tableName;
-  }
-
-  private get validColumns() {
-    const cols = getColumnMetadata(this.entityClass);
-    return cols.map((c) => c.propertyKey);
   }
 
   public mapToEntity = (row: unknown): T => {
@@ -41,7 +35,7 @@ export class Repository<T extends BaseEntity = BaseEntity> {
     return rows.map(this.mapToEntity);
   }
 
-  findById(id: number | bigint) {
+  findById(id: T["id"]) {
     const row = this.db
       .prepare(`SELECT * FROM ${this.tableName} WHERE id = ?`)
       .get(id);
@@ -50,24 +44,17 @@ export class Repository<T extends BaseEntity = BaseEntity> {
   }
 
   create(data: Partial<Omit<T, "id">>) {
-    const errors = validate(this.entityClass, data, false);
-    if (errors.length > 0) {
-      throw new ValidationError(errors);
-    }
+    const schema = getSchema(this.entityClass);
+    const validData = schema.parse(data);
 
-    const validKeys = new Set(this.validColumns);
+    const entries = Object.entries(validData);
 
-    const entries = Object.entries(data);
-    const validEntries = entries.filter(([k, v]) => {
-      return v !== undefined && validKeys.has(k);
-    });
-
-    if (validEntries.length === 0) {
+    if (entries.length === 0) {
       throw new Error("No valid columns provided for insert");
     }
 
-    const keys = validEntries.map(([k]) => k);
-    const values = validEntries.map(([_, v]) => v);
+    const keys = entries.map(([k]) => k);
+    const values = entries.map(([_, v]) => v);
 
     const placeholders = keys.map(() => "?").join(", ");
     const columns = keys.join(", ");
@@ -79,24 +66,18 @@ export class Repository<T extends BaseEntity = BaseEntity> {
     return stmt.run(...values);
   }
 
-  update(id: number | string, data: Partial<Omit<T, "id">>) {
-    const errors = validate(this.entityClass, data, true);
-    if (errors.length > 0) {
-      throw new ValidationError(errors);
-    }
+  update(id: T["id"], data: Partial<Omit<T, "id">>) {
+    const schema = getSchema(this.entityClass).partial();
+    const validData = schema.parse(data);
 
-    const validKeys = new Set(this.validColumns);
-
-    const entries = Object.entries(data).filter(([k, v]) => {
-      return v !== undefined && validKeys.has(k);
-    });
+    const entries = Object.entries(validData);
 
     if (entries.length === 0) {
       throw new Error("No valid data provided for update");
     }
 
     const setClause = entries.map(([k]) => `${k} = ?`).join(", ");
-    const values = entries.map(([_, v]) => v);
+    const values = entries.map(([_, v]) => v) as T[keyof T][];
     values.push(id);
 
     const stmt = this.db.prepare(
@@ -106,7 +87,7 @@ export class Repository<T extends BaseEntity = BaseEntity> {
     return stmt.run(...values);
   }
 
-  delete(id: number | string) {
+  delete(id: T["id"]) {
     return this.db
       .prepare(`DELETE FROM ${this.tableName} WHERE id = ?`)
       .run(id);

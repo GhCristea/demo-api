@@ -1,48 +1,32 @@
 import { Router } from "express";
 import { AppDataSource } from "../data-source/index.ts";
 import { Item } from "../entities/Item.ts";
-import { BadRequestError, NotFoundError } from "../errors/HttpError.ts";
+import { NotFoundError } from "../errors/HttpError.ts";
+import { z } from "../lib/z.ts";
+import { getSchema } from "../orm/schemaFactory.ts";
 
-const parseId = (id: string): number => {
-  const parsed = Number(id);
-  if (isNaN(parsed) || !Number.isInteger(parsed)) {
-    throw new BadRequestError("Invalid ID format");
-  }
-  return parsed;
-};
+const IdParamSchema = z.string().min(1).coerceNumber();
 
-const isObject = (value: unknown): value is object => {
-  return typeof value === "object" && value !== null;
-};
-
-const isString = (value: unknown): value is string => {
-  return typeof value === "string";
-};
-
-const parseObject = (value: unknown): object => {
-  if (!isObject(value)) {
-    throw new BadRequestError();
-  }
-  return value;
-};
+const ItemQuerySchema = z.object({
+  search: z.string().optional(),
+  limit: z.string().coerceNumber().optional()
+});
 
 export const itemsRouter = Router();
 
 itemsRouter.get("/", (req, res, next) => {
   try {
     const repo = AppDataSource.getRepository(Item);
-    const { search, limit } = req.query;
+    const { search, limit } = ItemQuerySchema.parse(req.query);
 
     let query = repo.getQuery();
 
-    if (isString(search)) {
+    if (search) {
       query = query.where((f) => f.contains("name", search));
     }
 
-    query = query.limit((isString(limit) && Number(limit)) || 100);
-
-    const items = query.getMany();
-    res.json(items);
+    query = query.limit(limit ?? 100);
+    res.json(query.getMany());
   } catch (err) {
     next(err);
   }
@@ -50,10 +34,11 @@ itemsRouter.get("/", (req, res, next) => {
 
 itemsRouter.get("/:id", (req, res, next) => {
   try {
-    const id = parseId(req.params.id);
+    const id = IdParamSchema.parse(req.params.id);
+
     const item = AppDataSource.getRepository(Item).findById(id);
     if (!item) {
-      throw new NotFoundError(`Item with id ${req.params.id} not found`);
+      throw new NotFoundError(`Item with id ${String(id)} not found`);
     }
     res.json(item);
   } catch (err) {
@@ -63,21 +48,25 @@ itemsRouter.get("/:id", (req, res, next) => {
 
 itemsRouter.post("/", (req, res, next) => {
   try {
-    const body = parseObject(req.body);
     const repo = AppDataSource.getRepository(Item);
 
-    if (Array.isArray(body)) {
+    const createSchema = getSchema(Item).omit(["id"]);
+
+    if (Array.isArray(req.body)) {
+      const items = z.array(createSchema).parse(req.body);
+
       const results = AppDataSource.transaction(() => {
-        return body.map((item) => {
-          const res = repo.create(parseObject(item));
-          return repo.findById(res.lastInsertRowid);
+        return items.map((item) => {
+          const res = repo.create(item);
+          return repo.findById(Number(res.lastInsertRowid));
         });
       });
       res.status(201).json(results);
     } else {
-      const result = repo.create(parseObject(body));
-      const newItem = repo.findById(result.lastInsertRowid);
-      res.status(201).json(newItem);
+      const item = createSchema.parse(req.body);
+
+      const result = repo.create(item);
+      res.status(201).json(repo.findById(Number(result.lastInsertRowid)));
     }
   } catch (err) {
     next(err);
@@ -86,14 +75,26 @@ itemsRouter.post("/", (req, res, next) => {
 
 itemsRouter.put("/:id", (req, res, next) => {
   try {
-    const body = parseObject(req.body);
-    const result = AppDataSource.getRepository(Item).update(
-      req.params.id,
-      body
-    );
-    if (result.changes === 0) {
-      throw new NotFoundError();
-    }
+    const id = IdParamSchema.parse(req.params.id);
+    const updateSchema = getSchema(Item).omit(["id"]);
+    const body = updateSchema.parse(req.body);
+
+    const result = AppDataSource.getRepository(Item).update(id, body);
+    if (result.changes === 0) throw new NotFoundError();
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+itemsRouter.patch("/:id", (req, res, next) => {
+  try {
+    const id = IdParamSchema.parse(req.params.id);
+    const updateSchema = getSchema(Item).omit(["id"]).partial();
+    const body = updateSchema.parse(req.body);
+
+    const result = AppDataSource.getRepository(Item).update(id, body);
+    if (result.changes === 0) throw new NotFoundError();
     res.json(result);
   } catch (err) {
     next(err);
@@ -102,10 +103,9 @@ itemsRouter.put("/:id", (req, res, next) => {
 
 itemsRouter.delete("/:id", (req, res, next) => {
   try {
-    const result = AppDataSource.getRepository(Item).delete(req.params.id);
-    if (result.changes === 0) {
-      throw new NotFoundError();
-    }
+    const id = IdParamSchema.parse(req.params.id);
+    const result = AppDataSource.getRepository(Item).delete(id);
+    if (result.changes === 0) throw new NotFoundError();
     res.json(result);
   } catch (err) {
     next(err);

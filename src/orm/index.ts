@@ -1,20 +1,20 @@
 import Db from "better-sqlite3";
-import type { BaseEntity, EntityClass, SQLiteDB } from "./types.ts";
+import type { BaseEntity, Constructor, SQLiteDB } from "./types.ts";
 import { Repository } from "./Repository.ts";
 import { getColumnMetadata, getTableName } from "./decorators.ts";
 
-interface Config {
+interface Config<T> {
   dbPath: string;
-  entities: EntityClass[];
+  entities: T[];
   logging?: boolean;
 }
 
-export class DataSource {
+export class DataSource<T extends BaseEntity> {
   public db: SQLiteDB;
-  private entities: EntityClass[];
-  private repositories = new Map<EntityClass, Repository>();
+  private entities: Constructor<T>[];
+  private repositories = new Map<Constructor<T>, Repository<T>>();
 
-  constructor(config: Config) {
+  constructor(config: Config<Constructor<T>>) {
     this.db = new Db(config.dbPath, {
       verbose: config.logging ? console.log : undefined
     });
@@ -66,7 +66,7 @@ export class DataSource {
     this.db.close();
   }
 
-  getRepository<T extends BaseEntity>(entityClass: EntityClass<T>) {
+  getRepository(entityClass: Constructor<T>) {
     if (!this.repositories.has(entityClass)) {
       if (!this.entities.includes(entityClass)) {
         throw new Error(`${entityClass.name} not registered in DataSource.`);
@@ -76,6 +76,7 @@ export class DataSource {
         new Repository<T>(this.db, entityClass)
       );
     }
-    return this.repositories.get(entityClass) as Repository<T>;
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    return this.repositories.get(entityClass)!;
   }
 }

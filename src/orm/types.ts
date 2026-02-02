@@ -4,10 +4,9 @@ export interface BaseEntity {
   id?: number | string;
 }
 
-export type EntityClass<T extends BaseEntity = BaseEntity> = new () => T;
-
-export type Target<T extends BaseEntity = BaseEntity> = InstanceType<
-  EntityClass<T>
->;
+export type Constructor<
+  T extends BaseEntity = BaseEntity,
+  A extends unknown[] = unknown[]
+> = new (...args: A) => T;
 
 export type SQLiteDB = Database;
