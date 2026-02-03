@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import { itemsRouter } from "./rest/itemsRouter.ts";
+import { itemsRouter } from "./interface/rest/itemsRouter.ts";
 import { AppDataSource } from "./data-source/index.ts";
 import { errorHandler } from "./middleware/errorHandler.ts";
 import type { Server } from "http";

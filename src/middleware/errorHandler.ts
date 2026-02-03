@@ -1,7 +1,10 @@
 import type { Request, Response, NextFunction } from "express";
-import { mapDbError } from "../orm/dbErrorMapper.ts";
-import { HttpError, ValidationError } from "../errors/HttpError.ts";
-import { ZError } from "../lib/z.ts";
+import { ZodError } from "zod";
+import {
+  AppError,
+  NotFoundError,
+  ValidationError
+} from "../core/errors/AppError.ts";
 
 export function errorHandler(
   err: unknown,
@@ -9,20 +12,14 @@ export function errorHandler(
   res: Response,
   _next: NextFunction
 ) {
-  if (err instanceof ZError) {
+  if (err instanceof ZodError) {
     res.status(400).json({
       status: "error",
       statusCode: 400,
       message: "Validation Failed",
+      errors: err.issues,
       timestamp: new Date().toISOString(),
-      path: _req.url,
-      errors: err.issues.map((issue) => ({
-        path:
-          issue.path
-            ?.map((k) => (typeof k === "object" ? k.key : k))
-            .join(".") ?? "root",
-        message: issue.message
-      }))
+      path: _req.url
     });
     return;
   }
@@ -32,30 +29,41 @@ export function errorHandler(
       status: "error",
       statusCode: 400,
       message: "Validation Failed",
-      errors: err.errors,
+      errors: err.issues,
       timestamp: new Date().toISOString(),
       path: _req.url
     });
     return;
   }
 
-  const httpError = mapDbError(err);
-
-  if (httpError instanceof HttpError) {
-    res.status(httpError.statusCode).json({
+  if (err instanceof NotFoundError) {
+    res.status(404).json({
       status: "error",
-      statusCode: httpError.statusCode,
-      message: httpError.message,
+      statusCode: 404,
+      message: err.message,
       timestamp: new Date().toISOString(),
       path: _req.url
     });
-  } else {
-    res.status(500).json({
-      status: "error",
-      statusCode: 500,
-      message: "Internal Server Error",
-      timestamp: new Date().toISOString(),
-      path: _req.url
-    });
+    return;
   }
+
+  if (err instanceof AppError) {
+    res.status(400).json({
+      status: "error",
+      statusCode: 400,
+      message: err.message,
+      timestamp: new Date().toISOString(),
+      path: _req.url
+    });
+    return;
+  }
+
+  console.error("Unexpected error:", err);
+  res.status(500).json({
+    status: "error",
+    statusCode: 500,
+    message: "Internal Server Error",
+    timestamp: new Date().toISOString(),
+    path: _req.url
+  });
 }

@@ -1,31 +1,36 @@
-import { AppDataSource } from "../data-source/index.ts";
+import { AppDataSource } from "../../data-source/index.ts";
 import { Item } from "../entities/Item.ts";
-import { NotFoundError } from "../errors/HttpError.ts";
+import { NotFoundError } from "../errors/AppError.ts";
+import type { CreateItemDTO } from "../dto/item.dto.ts";
 
 export class ItemService {
   private repo = AppDataSource.getRepository(Item);
 
-  list(params: { search: string | undefined; limit: number | undefined }) {
+  list(params: { search?: string | undefined; limit?: number | undefined }) {
     let query = this.repo.getQuery();
 
-    const { search, limit } = params;
+    query = query
+      .select("items.*, categories.name as categoryName")
+      .leftJoin("categories", "items.categoryId = categories.id");
+
+    const search = params.search;
     if (search) {
-      query = query.where((f) => f.contains("name", search));
+      query = query.where((f) => f.contains("items.name", search));
     }
 
-    query = query.limit(limit ?? 100);
+    query = query.limit(params.limit ?? 100);
     return query.getMany();
   }
 
   getOne(id: number) {
     const item = this.repo.findById(id);
     if (!item) {
-      throw new NotFoundError(`Item ${String(id)} not found`);
+      throw new NotFoundError("Item", id);
     }
     return item;
   }
 
-  create(data: Partial<Item> | Partial<Item>[]) {
+  create(data: CreateItemDTO | CreateItemDTO[]) {
     if (Array.isArray(data)) {
       return AppDataSource.transaction(() => {
         return data.map((item) => {
@@ -39,10 +44,10 @@ export class ItemService {
     return this.repo.findById(Number(res.lastInsertRowid));
   }
 
-  update(id: number, data: Partial<Item>) {
+  update(id: number, data: Partial<CreateItemDTO>) {
     const res = this.repo.update(id, data);
     if (res.changes === 0) {
-      throw new NotFoundError(`Item ${String(id)} not found`);
+      throw new NotFoundError("Item", id);
     }
     return res;
   }
@@ -50,7 +55,7 @@ export class ItemService {
   delete(id: number) {
     const res = this.repo.delete(id);
     if (res.changes === 0) {
-      throw new NotFoundError(`Item ${String(id)} not found`);
+      throw new NotFoundError("Item", id);
     }
     return res;
   }

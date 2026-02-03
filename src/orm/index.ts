@@ -44,6 +44,13 @@ export class DataSource<T extends BaseEntity> {
         const colDefs = columns.map((col) => {
           let def = `${col.propertyKey} ${col.type}`;
           if (col.isPrimary) def += " PRIMARY KEY AUTOINCREMENT";
+          else if (col.foreignKey) {
+            const [refTable, refCol] = col.foreignKey.split(".");
+            if (!refTable || !refCol) {
+              throw new Error(`Invalid foreign key: ${col.foreignKey}`);
+            }
+            def += ` REFERENCES ${refTable}(${refCol})`;
+          }
           return def;
         });
 

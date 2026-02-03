@@ -6,12 +6,26 @@ export class QueryBuilder<T> {
   private limitVal = -1;
   private offsetVal = 0;
   private orderByClause = "";
+  private joins: string[] = [];
+  private selectClause = "";
 
   constructor(
     private db: SQLiteDB,
     private tableName: string,
     private mapper: (row: unknown) => T
-  ) {}
+  ) {
+    this.selectClause = `${tableName}.*`;
+  }
+
+  leftJoin(table: string, on: string) {
+    this.joins.push(`LEFT JOIN ${table} ON ${on}`);
+    return this;
+  }
+
+  select(rawSql: string) {
+    this.selectClause = rawSql;
+    return this;
+  }
 
   where(callback: (f: Filter<T>) => FilterCondition) {
     const filter = new Filter<T>();
@@ -20,7 +34,7 @@ export class QueryBuilder<T> {
   }
 
   orderBy(field: Field<T>, direction: "ASC" | "DESC" = "ASC") {
-    this.orderByClause = `ORDER BY ${field} ${direction}`;
+    this.orderByClause = `ORDER BY ${this.tableName}.${field} ${direction}`;
     return this;
   }
 
@@ -36,7 +50,8 @@ export class QueryBuilder<T> {
 
   getSql() {
     const clauses = [
-      `SELECT * FROM ${this.tableName}`,
+      `SELECT ${this.selectClause} FROM ${this.tableName}`,
+      ...this.joins,
       this.whereClause ? `WHERE ${this.whereClause}` : "",
       this.orderByClause,
       this.limitVal > -1 ? `LIMIT ${String(this.limitVal)}` : "",
