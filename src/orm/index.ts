@@ -1,87 +1,41 @@
-import Db from "better-sqlite3";
-import type { BaseEntity, Constructor, SQLiteDB } from "./types.ts";
-import { Repository } from "./Repository.ts";
-import { getColumnMetadata, getTableName } from "./decorators.ts";
+/**
+ * ORM Layer - Kysely-based data access abstraction.
+ *
+ * Exports:
+ * - Database instance and schema types
+ * - Generic Repository base class
+ * - Domain-specific repositories (ItemRepository, CategoryRepository)
+ * - Type utilities for CRUD operations
+ *
+ * Usage:
+ * ```ts
+ * import { itemRepository, categoryRepository } from '@/orm'
+ * import { db } from '@/orm/db'
+ * import type { ItemRow, NewItem } from '@/orm/database'
+ * ```
+ */
 
-interface Config {
-  dbPath: string;
-  entities: Constructor[];
-  logging?: boolean;
-}
+// Database
+export { db } from './db'
+export type { DB } from './db'
+export type {
+  DatabaseSchema,
+  ItemTable,
+  CategoryTable,
+  ItemRow,
+  ItemUpdate,
+  NewItem,
+  CategoryRow,
+  CategoryUpdate,
+  NewCategory,
+} from './database'
 
-export class DataSource {
-  public db: SQLiteDB;
-  private entities: Constructor[];
-  private repositories = new Map<Constructor, Repository>();
+// Base Repository
+export { Repository } from './Repository'
 
-  constructor(config: Config) {
-    this.db = new Db(config.dbPath, {
-      verbose: config.logging ? console.log : undefined
-    });
-    this.entities = config.entities;
+// Domain Repositories
+export { ItemRepository, itemRepository } from './repositories/ItemRepository'
+export { CategoryRepository, categoryRepository } from './repositories/CategoryRepository'
 
-    this.db.pragma("journal_mode = WAL");
-    this.db.pragma("foreign_keys = ON");
-    this.db.pragma("synchronous = NORMAL");
-
-    this.entities.forEach((entity) => {
-      if (!getTableName(entity)) {
-        throw new Error(`Class ${entity.name} is missing @Entity decorator.`);
-      }
-    });
-  }
-
-  public initialize() {
-    return new Promise<void>((resolve) => {
-      this.entities.forEach((entity) => {
-        const tableName = getTableName(entity);
-        const columns = getColumnMetadata(entity);
-
-        if (columns.length === 0 || !tableName) {
-          throw new Error(`Entity ${entity.name} has no columns defined.`);
-        }
-
-        const colDefs = columns.map((col) => {
-          let def = `${col.propertyKey} ${col.type}`;
-          if (col.isPrimary) def += " PRIMARY KEY AUTOINCREMENT";
-          else if (col.foreignKey) {
-            const [refTable, refCol] = col.foreignKey.split(".");
-            if (!refTable || !refCol) {
-              throw new Error(`Invalid foreign key: ${col.foreignKey}`);
-            }
-            def += ` REFERENCES ${refTable}(${refCol})`;
-          }
-          return def;
-        });
-
-        const sql = `CREATE TABLE IF NOT EXISTS ${tableName} (${colDefs.join(", ")})`;
-
-        console.log(`[ORM] Syncing: ${tableName}`);
-        this.db.exec(sql);
-      });
-      resolve();
-    });
-  }
-
-  public transaction<T extends BaseEntity>(
-    fn: () => (T | undefined)[]
-  ): (T | undefined)[] {
-    const txn = this.db.transaction(fn);
-    return txn();
-  }
-
-  public destroy() {
-    console.log("[ORM] Closing database connection...");
-    this.db.close();
-  }
-
-  getRepository<T extends BaseEntity>(entityClass: Constructor<T>) {
-    if (!this.repositories.has(entityClass)) {
-      if (!this.entities.includes(entityClass)) {
-        throw new Error(`${entityClass.name} not registered in DataSource.`);
-      }
-      this.repositories.set(entityClass, new Repository(this.db, entityClass));
-    }
-    return this.repositories.get(entityClass) as Repository<T>;
-  }
-}
+// Error handling
+export { mapDbError } from './dbErrorMapper'
