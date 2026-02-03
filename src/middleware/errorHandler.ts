@@ -9,13 +9,13 @@ export function errorHandler(
   res: Response,
   _next: NextFunction
 ) {
-  const httpError = mapDbError(err);
-
   if (err instanceof ZError) {
     res.status(400).json({
       status: "error",
       statusCode: 400,
       message: "Validation Failed",
+      timestamp: new Date().toISOString(),
+      path: _req.url,
       errors: err.issues.map((issue) => ({
         path:
           issue.path
@@ -32,22 +32,30 @@ export function errorHandler(
       status: "error",
       statusCode: 400,
       message: "Validation Failed",
-      errors: err.errors
+      errors: err.errors,
+      timestamp: new Date().toISOString(),
+      path: _req.url
     });
     return;
   }
+
+  const httpError = mapDbError(err);
 
   if (httpError instanceof HttpError) {
     res.status(httpError.statusCode).json({
       status: "error",
       statusCode: httpError.statusCode,
-      message: httpError.message
+      message: httpError.message,
+      timestamp: new Date().toISOString(),
+      path: _req.url
     });
   } else {
     res.status(500).json({
       status: "error",
       statusCode: 500,
-      message: "Internal Server Error"
+      message: "Internal Server Error",
+      timestamp: new Date().toISOString(),
+      path: _req.url
     });
   }
 }
