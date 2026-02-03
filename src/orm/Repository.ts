@@ -1,95 +1,118 @@
-import { getTableName } from "./decorators.ts";
-import type { BaseEntity, Constructor, SQLiteDB } from "./types.ts";
-import { QueryBuilder } from "./QueryBuilder.ts";
-import { getSchema } from "./schemaFactory.ts";
+import type { Expression, ExpressionBuilder, Kysely } from 'kysely'
+import type { DatabaseSchema } from './database'
 
-export class Repository<T extends BaseEntity = BaseEntity> {
+/**
+ * Generic repository abstraction using Kysely.
+ *
+ * Provides common CRUD operations for any table in the schema.
+ * Enforces separation of concerns: domain logic separate from persistence.
+ *
+ * @example
+ * ```ts
+ * class UserRepository extends Repository<'users'> {
+ *   constructor() {
+ *     super(db, 'users')
+ *   }
+ *
+ *   async findByEmail(email: string) {
+ *     return this.query().where('email', '=', email).executeTakeFirst()
+ *   }
+ * }
+ * ```
+ */
+export abstract class Repository<T extends keyof DatabaseSchema> {
   constructor(
-    private db: SQLiteDB,
-    private entityClass: Constructor<T>
+    protected db: Kysely<DatabaseSchema>,
+    protected tableName: T,
   ) {}
 
-  private get tableName() {
-    const tableName = getTableName(this.entityClass);
-    if (!tableName) {
-      throw new Error(`Entity ${this.entityClass.name} has no table name.`);
-    }
-    return tableName;
+  /**
+   * Get the query builder for this table.
+   * Allows domain-specific repos to build custom queries.
+   */
+  protected query() {
+    return this.db.selectFrom(this.tableName).selectAll()
   }
 
-  public mapToEntity = (row: unknown): T => {
-    if (!row || typeof row !== "object") {
-      throw new Error(`Query returned invalid row: ${String(row)}`);
-    }
-    const entity = new this.entityClass();
-    Object.assign(entity, row);
-    return entity;
-  };
-
-  getQuery() {
-    return new QueryBuilder<T>(this.db, this.tableName, this.mapToEntity);
-  }
-
-  findAll() {
-    const rows = this.db.prepare(`SELECT * FROM ${this.tableName}`).all();
-    return rows.map(this.mapToEntity);
-  }
-
-  findById(id: T["id"]) {
-    const row = this.db
-      .prepare(`SELECT * FROM ${this.tableName} WHERE id = ?`)
-      .get(id);
-
-    return row ? this.mapToEntity(row) : undefined;
-  }
-
-  create(data: Partial<Omit<T, "id">>) {
-    const schema = getSchema(this.entityClass);
-    const validData = schema.parse(data);
-
-    const entries = Object.entries(validData);
-
-    if (entries.length === 0) {
-      throw new Error("No valid columns provided for insert");
-    }
-
-    const keys = entries.map(([k]) => k);
-    const values = entries.map(([_, v]) => v);
-
-    const placeholders = keys.map(() => "?").join(", ");
-    const columns = keys.join(", ");
-
-    const stmt = this.db.prepare(
-      `INSERT INTO ${this.tableName} (${columns}) VALUES (${placeholders})`
-    );
-
-    return stmt.run(...values);
-  }
-
-  update(id: T["id"], data: Partial<Omit<T, "id">>) {
-    const schema = getSchema(this.entityClass).partial();
-    const validData = schema.parse(data);
-
-    const entries = Object.entries(validData);
-
-    if (entries.length === 0) {
-      throw new Error("No valid data provided for update");
-    }
-
-    const setClause = entries.map(([k]) => `${k} = ?`).join(", ");
-    const values = entries.map(([_, v]) => v) as T[keyof T][];
-    values.push(id);
-
-    const stmt = this.db.prepare(
-      `UPDATE ${this.tableName} SET ${setClause} WHERE id = ?`
-    );
-
-    return stmt.run(...values);
-  }
-
-  delete(id: T["id"]) {
+  /**
+   * Find a single record by primary key (id).
+   */
+  async findById(id: number) {
     return this.db
-      .prepare(`DELETE FROM ${this.tableName} WHERE id = ?`)
-      .run(id);
+      .selectFrom(this.tableName)
+      .selectAll()
+      .where('id' as never, '=', id as never)
+      .executeTakeFirst()
+  }
+
+  /**
+   * Find all records with optional limit.
+   */
+  async findAll(limit = 100) {
+    return this.db
+      .selectFrom(this.tableName)
+      .selectAll()
+      .limit(limit)
+      .execute()
+  }
+
+  /**
+   * Create a new record.
+   * Returns the inserted row with generated fields.
+   */
+  async create(data: Record<string, any>) {
+    return this.db
+      .insertInto(this.tableName)
+      .values(data as never)
+      .returningAll()
+      .executeTakeFirstOrThrow()
+  }
+
+  /**
+   * Update a record by id.
+   * Returns the updated row or undefined if not found.
+   */
+  async update(id: number, data: Record<string, any>) {
+    return this.db
+      .updateTable(this.tableName)
+      .set(data as never)
+      .where('id' as never, '=', id as never)
+      .returningAll()
+      .executeTakeFirst()
+  }
+
+  /**
+   * Delete a record by id.
+   */
+  async delete(id: number) {
+    return this.db
+      .deleteFrom(this.tableName)
+      .where('id' as never, '=', id as never)
+      .execute()
+  }
+
+  /**
+   * Count total records in the table.
+   */
+  async count() {
+    const result = await this.db
+      .selectFrom(this.tableName)
+      .select(eb => eb.fn.count<number>('*').as('count'))
+      .executeTakeFirst()
+
+    return result?.count ?? 0
+  }
+
+  /**
+   * Check if a record exists by id.
+   */
+  async exists(id: number) {
+    const result = await this.db
+      .selectFrom(this.tableName)
+      .select('id')
+      .where('id' as never, '=', id as never)
+      .executeTakeFirst()
+
+    return !!result
   }
 }
