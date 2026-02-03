@@ -3,7 +3,7 @@ import type { BaseEntity, Constructor, SQLiteDB } from "./types.ts";
 import { QueryBuilder } from "./QueryBuilder.ts";
 import { getSchema } from "./schemaFactory.ts";
 
-export class Repository<T extends BaseEntity> {
+export class Repository<T extends BaseEntity = BaseEntity> {
   constructor(
     private db: SQLiteDB,
     private entityClass: Constructor<T>

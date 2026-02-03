@@ -22,7 +22,7 @@ export class ItemService {
     return query.getMany();
   }
 
-  getOne(id: number) {
+  getOne(id: Item["id"]) {
     const item = this.repo.findById(id);
     if (!item) {
       throw new NotFoundError("Item", id);
@@ -32,7 +32,7 @@ export class ItemService {
 
   create(data: CreateItemDTO | CreateItemDTO[]) {
     if (Array.isArray(data)) {
-      return AppDataSource.transaction(() => {
+      return AppDataSource.transaction<Item>(() => {
         return data.map((item) => {
           const res = this.repo.create(item);
           return this.repo.findById(Number(res.lastInsertRowid));
@@ -44,7 +44,7 @@ export class ItemService {
     return this.repo.findById(Number(res.lastInsertRowid));
   }
 
-  update(id: number, data: Partial<CreateItemDTO>) {
+  update(id: Item["id"], data: Partial<CreateItemDTO>) {
     const res = this.repo.update(id, data);
     if (res.changes === 0) {
       throw new NotFoundError("Item", id);
@@ -52,7 +52,7 @@ export class ItemService {
     return res;
   }
 
-  delete(id: number) {
+  delete(id: Item["id"]) {
     const res = this.repo.delete(id);
     if (res.changes === 0) {
       throw new NotFoundError("Item", id);
