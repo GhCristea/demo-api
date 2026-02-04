@@ -1,5 +1,5 @@
 import "reflect-metadata";
-import type { ZType } from "../lib/z.ts";
+import type { ZodType } from "zod";
 import type { BaseEntity, Constructor } from "./types.ts";
 
 export const TABLE_NAME_KEY = "orm:tableName";
@@ -9,7 +9,7 @@ export const VALIDATION_KEY = "orm:validation";
 export interface ColumnMetadata {
   propertyKey: string;
   type: string;
-
+  foreignKey?: string;
   isPrimary?: boolean;
 }
 
@@ -21,10 +21,10 @@ export function getColumnMetadata(target: Constructor) {
   return (Reflect.getMetadata(COLUMNS_KEY, target) ?? []) as ColumnMetadata[];
 }
 
-export function getValidationRules<T>(target: Constructor) {
+export function getValidationRules(target: Constructor) {
   return (Reflect.getMetadata(VALIDATION_KEY, target) ?? {}) as Record<
     string,
-    ZType<T>
+    ZodType
   >;
 }
 
@@ -34,21 +34,27 @@ export function Entity(tableName: string) {
   };
 }
 
-interface ColumnOptions<T> {
-  rule?: ZType<T>;
+interface ColumnOptions {
+  rule?: ZodType;
+  foreignKey?: string;
 }
 
-export function Column<T>(options?: ColumnOptions<T>) {
+export function Column(options?: ColumnOptions) {
   return function (target: BaseEntity, propertyKey: string) {
     const constructor = target.constructor as Constructor;
 
     const columns = getColumnMetadata(constructor);
     const type = "TEXT";
 
-    columns.push({ propertyKey, type });
+    columns.push({
+      propertyKey,
+      type,
+      ...(options?.foreignKey ? { foreignKey: options.foreignKey } : {})
+    });
     Reflect.defineMetadata(COLUMNS_KEY, columns, constructor);
+
     if (options?.rule) {
-      const rules = getValidationRules<T>(constructor);
+      const rules = getValidationRules(constructor);
       rules[propertyKey] = options.rule;
       Reflect.defineMetadata(VALIDATION_KEY, rules, constructor);
     }

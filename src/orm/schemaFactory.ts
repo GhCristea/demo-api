@@ -1,4 +1,4 @@
-import { z } from "../lib/z.ts";
+import { z } from "zod";
 import { getValidationRules } from "./decorators.ts";
 import type { BaseEntity, Constructor } from "./types.ts";
 

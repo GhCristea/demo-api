@@ -1,14 +1,16 @@
 import { Router } from "express";
-import { Item } from "../entities/Item.ts";
-import { z } from "../lib/z.ts";
-import { getSchema } from "../orm/schemaFactory.ts";
-import { ItemService } from "../services/ItemService.ts";
+import { z } from "zod";
+import {
+  CreateItemSchema,
+  type CreateItemDTO
+} from "../../core/dto/item.dto.ts";
+import { ItemService } from "../../core/services/ItemService.ts";
 
-const IdParamSchema = z.string().min(1).coerceNumber();
+const IdParamSchema = z.coerce.number().min(1);
 
 const ItemQuerySchema = z.object({
   search: z.string().optional(),
-  limit: z.string().coerceNumber().optional()
+  limit: z.coerce.number().optional()
 });
 
 export const itemsRouter = Router();
@@ -36,14 +38,12 @@ itemsRouter.get("/:id", (req, res, next) => {
 
 itemsRouter.post("/", (req, res, next) => {
   try {
-    const createSchema = getSchema(Item).omit(["id"]);
-
     if (Array.isArray(req.body)) {
-      const items = z.array(createSchema).parse(req.body);
+      const items = z.array(CreateItemSchema).parse(req.body);
       const results = service.create(items);
       res.status(201).json(results);
     } else {
-      const item = createSchema.parse(req.body);
+      const item = CreateItemSchema.parse(req.body);
       const result = service.create(item);
       res.status(201).json(result);
     }
@@ -55,8 +55,7 @@ itemsRouter.post("/", (req, res, next) => {
 itemsRouter.put("/:id", (req, res, next) => {
   try {
     const id = IdParamSchema.parse(req.params.id);
-    const updateSchema = getSchema(Item).omit(["id"]);
-    const body = updateSchema.parse(req.body);
+    const body = CreateItemSchema.parse(req.body);
 
     const result = service.update(id, body);
     res.json(result);
@@ -68,10 +67,9 @@ itemsRouter.put("/:id", (req, res, next) => {
 itemsRouter.patch("/:id", (req, res, next) => {
   try {
     const id = IdParamSchema.parse(req.params.id);
-    const updateSchema = getSchema(Item).omit(["id"]).partial();
-    const body = updateSchema.parse(req.body);
+    const body = CreateItemSchema.partial().parse(req.body);
 
-    const result = service.update(id, body);
+    const result = service.update(id, body as CreateItemDTO);
     res.json(result);
   } catch (err) {
     next(err);

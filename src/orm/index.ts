@@ -3,18 +3,18 @@ import type { BaseEntity, Constructor, SQLiteDB } from "./types.ts";
 import { Repository } from "./Repository.ts";
 import { getColumnMetadata, getTableName } from "./decorators.ts";
 
-interface Config<T> {
+interface Config {
   dbPath: string;
-  entities: T[];
+  entities: Constructor[];
   logging?: boolean;
 }
 
-export class DataSource<T extends BaseEntity> {
+export class DataSource {
   public db: SQLiteDB;
-  private entities: Constructor<T>[];
-  private repositories = new Map<Constructor<T>, Repository<T>>();
+  private entities: Constructor[];
+  private repositories = new Map<Constructor, Repository>();
 
-  constructor(config: Config<Constructor<T>>) {
+  constructor(config: Config) {
     this.db = new Db(config.dbPath, {
       verbose: config.logging ? console.log : undefined
     });
@@ -44,6 +44,13 @@ export class DataSource<T extends BaseEntity> {
         const colDefs = columns.map((col) => {
           let def = `${col.propertyKey} ${col.type}`;
           if (col.isPrimary) def += " PRIMARY KEY AUTOINCREMENT";
+          else if (col.foreignKey) {
+            const [refTable, refCol] = col.foreignKey.split(".");
+            if (!refTable || !refCol) {
+              throw new Error(`Invalid foreign key: ${col.foreignKey}`);
+            }
+            def += ` REFERENCES ${refTable}(${refCol})`;
+          }
           return def;
         });
 
@@ -56,7 +63,9 @@ export class DataSource<T extends BaseEntity> {
     });
   }
 
-  public transaction<T>(fn: () => T): T {
+  public transaction<T extends BaseEntity>(
+    fn: () => (T | undefined)[]
+  ): (T | undefined)[] {
     const txn = this.db.transaction(fn);
     return txn();
   }
@@ -66,17 +75,13 @@ export class DataSource<T extends BaseEntity> {
     this.db.close();
   }
 
-  getRepository(entityClass: Constructor<T>) {
+  getRepository<T extends BaseEntity>(entityClass: Constructor<T>) {
     if (!this.repositories.has(entityClass)) {
       if (!this.entities.includes(entityClass)) {
         throw new Error(`${entityClass.name} not registered in DataSource.`);
       }
-      this.repositories.set(
-        entityClass,
-        new Repository<T>(this.db, entityClass)
-      );
+      this.repositories.set(entityClass, new Repository(this.db, entityClass));
     }
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    return this.repositories.get(entityClass)!;
+    return this.repositories.get(entityClass) as Repository<T>;
   }
 }

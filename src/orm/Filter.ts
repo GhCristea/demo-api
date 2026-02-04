@@ -19,7 +19,7 @@ export class Filter<T> {
     return `${field} != ${this.quote(value)}` as FilterCondition;
   }
 
-  contains(field: Field<T>, value: string) {
+  contains(field: Field<T> | `${string}.${Field<T>}`, value: string) {
     return `${field} LIKE '%${this.escape(value)}%'` as FilterCondition;
   }
 
