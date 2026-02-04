@@ -6,7 +6,7 @@ import type { CreateItemDTO } from "../dto/item.dto.ts";
 export class ItemService {
   private repo = AppDataSource.getRepository(Item);
 
-  list(params: { search?: string | undefined; limit?: number | undefined }) {
+  list(params: { search?: string; limit?: number }) {
     let query = this.repo.getQuery();
 
     query = query
@@ -18,7 +18,8 @@ export class ItemService {
       query = query.where((f) => f.contains("items.name", search));
     }
 
-    query = query.limit(params.limit ?? 100);
+    query =
+      params.limit && !isNaN(params.limit) ? query.limit(params.limit) : query;
     return query.getMany();
   }
 

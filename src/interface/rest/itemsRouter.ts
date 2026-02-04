@@ -1,9 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import {
-  CreateItemSchema,
-  type CreateItemDTO
-} from "../../core/dto/item.dto.ts";
+import { CreateItemSchema } from "../../core/dto/item.dto.ts";
 import { ItemService } from "../../core/services/ItemService.ts";
 
 const IdParamSchema = z.coerce.number().min(1);
@@ -69,7 +66,7 @@ itemsRouter.patch("/:id", (req, res, next) => {
     const id = IdParamSchema.parse(req.params.id);
     const body = CreateItemSchema.partial().parse(req.body);
 
-    const result = service.update(id, body as CreateItemDTO);
+    const result = service.update(id, body);
     res.json(result);
   } catch (err) {
     next(err);
