@@ -20,7 +20,6 @@ const UpdateBody = CreateItemSchema.partial();
 itemsRouter.get(
   "/",
   route({ query: ListQuery }, (req, res) => {
-    console.log(req);
     const items = service.list(req.query);
     res.json(items);
   })

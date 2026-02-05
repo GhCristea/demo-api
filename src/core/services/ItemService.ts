@@ -1,30 +1,37 @@
 import { AppDataSource } from "../../data-source/index.ts";
-import { Item } from "../entities/Item.ts";
+import { Items, Categories, TABLE } from "../entities.ts";
 import { NotFoundError } from "../errors/AppError.ts";
 import type { CreateItemDTO } from "../dto/item.dto.ts";
 
 export class ItemService {
-  private repo = AppDataSource.getRepository(Item);
+  private get items() {
+    return AppDataSource.table(Items);
+  }
 
   list(params: { search?: string; limit?: number }) {
-    let query = this.repo.getQuery();
+    let query = this.items.selectRaw(
+      `${TABLE.Items}.*, ${TABLE.Categories}.name as categoryName`
+    );
 
-    query = query
-      .select("items.*, categories.name as categoryName")
-      .leftJoin("categories", "items.categoryId = categories.id");
+    query = query.leftJoin(
+      Categories,
+      `${TABLE.Items}.categoryId = ${TABLE.Categories}.id`
+    );
 
     const search = params.search;
     if (search) {
-      query = query.where((f) => f.contains("items.name", search));
+      query = query.where(`${TABLE.Items}.name`, "LIKE", `%${search}%`);
     }
 
-    query =
-      params.limit && !isNaN(params.limit) ? query.limit(params.limit) : query;
-    return query.getMany();
+    if (params.limit && !isNaN(params.limit)) {
+      query = query.limit(params.limit);
+    }
+
+    return query.get();
   }
 
-  getOne(id: Item["id"]) {
-    const item = this.repo.findById(id);
+  getOne(id: number) {
+    const item = this.items.findById(id);
     if (!item) {
       throw new NotFoundError("Item", id);
     }
@@ -33,28 +40,28 @@ export class ItemService {
 
   create(data: CreateItemDTO | CreateItemDTO[]) {
     if (Array.isArray(data)) {
-      return AppDataSource.transaction<Item>(() => {
+      return AppDataSource.transaction(() => {
         return data.map((item) => {
-          const res = this.repo.create(item);
-          return this.repo.findById(Number(res.lastInsertRowid));
+          const res = this.items.create(item);
+          return this.items.findById(Number(res.lastInsertRowid));
         });
       });
     }
 
-    const res = this.repo.create(data);
-    return this.repo.findById(Number(res.lastInsertRowid));
+    const res = this.items.create(data);
+    return this.items.findById(Number(res.lastInsertRowid));
   }
 
-  update(id: Item["id"], data: Partial<CreateItemDTO>) {
-    const res = this.repo.update(id, data);
+  update(id: number, data: Partial<CreateItemDTO>) {
+    const res = this.items.update(id, data);
     if (res.changes === 0) {
       throw new NotFoundError("Item", id);
     }
     return res;
   }
 
-  delete(id: Item["id"]) {
-    const res = this.repo.delete(id);
+  delete(id: number) {
+    const res = this.items.delete(id);
     if (res.changes === 0) {
       throw new NotFoundError("Item", id);
     }

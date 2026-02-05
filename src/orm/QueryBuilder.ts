@@ -1,75 +1,111 @@
-import type { SQLiteDB } from "./types.ts";
-import { Filter, type Field, type FilterCondition } from "./Filter.ts";
+import type { SQLiteDB, RunResult } from "./types.ts";
+import type { Table, Infer, TableSchema } from "./dialect.ts";
 
-export class QueryBuilder<T> {
-  private whereClause = "";
-  private limitVal = -1;
-  private offsetVal = 0;
-  private orderByClause = "";
-  private joins: string[] = [];
-  private selectClause = "";
+export class QueryBuilder<ResultType> {
+  private query = "";
+  private params: unknown[] = [];
+  private tableName: string;
+  private table: Table;
 
   constructor(
     private db: SQLiteDB,
-    private tableName: string,
-    private mapper: (row: unknown) => T
+    table: Table
   ) {
-    this.selectClause = `${tableName}.*`;
+    this.tableName = table.tableName;
+    this.table = table;
   }
 
-  leftJoin(table: string, on: string) {
-    this.joins.push(`LEFT JOIN ${table} ON ${on}`);
+  select(): this {
+    this.query = `SELECT * FROM ${this.tableName} ${this.query}`;
     return this;
   }
 
-  select(rawSql: string) {
-    this.selectClause = rawSql;
+  selectColumns(cols: (keyof ResultType)[]): this {
+    this.query = `SELECT ${cols.join(", ")} FROM ${this.tableName} ${this.query}`;
     return this;
   }
 
-  where(callback: (f: Filter<T>) => FilterCondition) {
-    const filter = new Filter<T>();
-    this.whereClause = callback(filter);
+  selectRaw(sql: string): this {
+    this.query = `SELECT ${sql} FROM ${this.tableName} ${this.query}`;
     return this;
   }
 
-  orderBy(field: Field<T>, direction: "ASC" | "DESC" = "ASC") {
-    this.orderByClause = `ORDER BY ${this.tableName}.${field} ${direction}`;
+  where<K extends keyof ResultType | string>(
+    column: K,
+    operator: "=" | ">" | "<" | "LIKE",
+    value: K extends keyof ResultType ? ResultType[K] : unknown
+  ): this {
+    const clause = this.query.includes("WHERE") ? "AND" : "WHERE";
+    this.query += ` ${clause} ${String(column)} ${operator} ?`;
+    this.params.push(value);
     return this;
   }
 
-  limit(count: number) {
-    this.limitVal = count;
+  limit(limit: number): this {
+    this.query += ` LIMIT ${String(limit)}`;
     return this;
   }
 
-  offset(count: number) {
-    this.offsetVal = count;
-    return this;
+  leftJoin<S extends TableSchema>(table: Table<S>, on: string) {
+    return this.join("LEFT", table, on);
   }
 
-  getSql() {
-    const clauses = [
-      `SELECT ${this.selectClause} FROM ${this.tableName}`,
-      ...this.joins,
-      this.whereClause ? `WHERE ${this.whereClause}` : "",
-      this.orderByClause,
-      this.limitVal > -1 ? `LIMIT ${String(this.limitVal)}` : "",
-      this.offsetVal > 0 ? `OFFSET ${String(this.offsetVal)}` : ""
-    ];
-
-    return clauses.filter(Boolean).join(" ");
+  innerJoin<S extends TableSchema>(table: Table<S>, on: string) {
+    return this.join("INNER", table, on);
   }
 
-  getMany(): T[] {
-    const sql = this.getSql();
-    const rows = this.db.prepare(sql).all();
-    return rows.map(this.mapper);
+  private join<S extends TableSchema>(
+    type: "LEFT" | "INNER",
+    table: Table<S>,
+    on: string
+  ): QueryBuilder<ResultType & Infer<S>> {
+    this.query += ` ${type} JOIN ${table.tableName} ON ${on}`;
+    return this as unknown as QueryBuilder<ResultType & Infer<S>>;
   }
 
-  getOne(): T | undefined {
-    const sql = this.getSql();
-    const row = this.db.prepare(sql).get();
-    return row ? this.mapper(row) : undefined;
+  get(): ResultType[] {
+    const stmt = this.db.prepare(this.query);
+    return stmt.all(this.params) as ResultType[];
+  }
+
+  first(): ResultType | undefined {
+    const stmt = this.db.prepare(this.query + " LIMIT 1");
+    return stmt.get(this.params) as ResultType | undefined;
+  }
+
+  create(data: Partial<ResultType>): RunResult {
+    const keys = Object.keys(data);
+    const placeholders = keys.map(() => "?").join(", ");
+    const sql = `INSERT INTO ${this.tableName} (${keys.join(", ")}) VALUES (${placeholders})`;
+
+    return this.db.prepare(sql).run(...Object.values(data));
+  }
+
+  update(id: string | number, data: Partial<ResultType>): RunResult {
+    const keys = Object.keys(data);
+    const setClause = keys.map((k) => `${k} = ?`).join(", ");
+    const pk = this.getPrimaryKey();
+
+    const sql = `UPDATE ${this.tableName} SET ${setClause} WHERE ${pk} = ?`;
+    return this.db.prepare(sql).run(...Object.values(data), id);
+  }
+
+  delete(id: string | number): RunResult {
+    const pk = this.getPrimaryKey();
+    const sql = `DELETE FROM ${this.tableName} WHERE ${pk} = ?`;
+    return this.db.prepare(sql).run(id);
+  }
+
+  findById(id: string | number): ResultType | undefined {
+    const pk = this.getPrimaryKey();
+    const sql = `SELECT * FROM ${this.tableName} WHERE ${pk} = ?`;
+    return this.db.prepare(sql).get(id) as ResultType | undefined;
+  }
+
+  private getPrimaryKey(): string {
+    const pk = Object.entries(this.table.schema).find(
+      ([_, def]) => def.primaryKey
+    );
+    return pk ? pk[0] : "id";
   }
 }

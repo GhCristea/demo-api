@@ -2,8 +2,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { existsSync, mkdirSync } from "fs";
 import { DataSource } from "../orm/index.ts";
-import { Item } from "../core/entities/Item.ts";
-import { Category } from "../core/entities/Category.ts";
+import { Items, Categories } from "../core/entities.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,6 +16,6 @@ if (!existsSync(dbDir)) {
 
 export const AppDataSource = new DataSource({
   dbPath: dbPath,
-  entities: [Item, Category],
+  tables: [Items, Categories],
   logging: process.env.NODE_ENV === "development"
 });

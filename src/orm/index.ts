@@ -1,66 +1,41 @@
 import Db from "better-sqlite3";
-import type { BaseEntity, Constructor, SQLiteDB } from "./types.ts";
-import { Repository } from "./Repository.ts";
-import { getColumnMetadata, getTableName } from "./decorators.ts";
+import type { BaseEntity, SQLiteDB } from "./types.ts";
+import type { Table, TableSchema, Infer } from "./dialect.ts";
+import { QueryBuilder } from "./QueryBuilder.ts";
 
 interface Config {
   dbPath: string;
-  entities: Constructor[];
+  tables?: Table[];
   logging?: boolean;
 }
 
 export class DataSource {
   public db: SQLiteDB;
-  private entities: Constructor[];
-  private repositories = new Map<Constructor, Repository>();
+  private tables: Table[];
 
   constructor(config: Config) {
     this.db = new Db(config.dbPath, {
       verbose: config.logging ? console.log : undefined
     });
-    this.entities = config.entities;
+    this.tables = config.tables ?? [];
 
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("foreign_keys = ON");
     this.db.pragma("synchronous = NORMAL");
-
-    this.entities.forEach((entity) => {
-      if (!getTableName(entity)) {
-        throw new Error(`Class ${entity.name} is missing @Entity decorator.`);
-      }
-    });
   }
 
   public initialize() {
     return new Promise<void>((resolve) => {
-      this.entities.forEach((entity) => {
-        const tableName = getTableName(entity);
-        const columns = getColumnMetadata(entity);
-
-        if (columns.length === 0 || !tableName) {
-          throw new Error(`Entity ${entity.name} has no columns defined.`);
-        }
-
-        const colDefs = columns.map((col) => {
-          let def = `${col.propertyKey} ${col.type}`;
-          if (col.isPrimary) def += " PRIMARY KEY AUTOINCREMENT";
-          else if (col.foreignKey) {
-            const [refTable, refCol] = col.foreignKey.split(".");
-            if (!refTable || !refCol) {
-              throw new Error(`Invalid foreign key: ${col.foreignKey}`);
-            }
-            def += ` REFERENCES ${refTable}(${refCol})`;
-          }
-          return def;
-        });
-
-        const sql = `CREATE TABLE IF NOT EXISTS ${tableName} (${colDefs.join(", ")})`;
-
-        console.log(`[ORM] Syncing: ${tableName}`);
-        this.db.exec(sql);
+      this.tables.forEach((table) => {
+        this.syncTable(table.tableName, table.getCreateSql());
       });
       resolve();
     });
+  }
+
+  private syncTable(name: string, sql: string) {
+    console.log(`[ORM] Syncing: ${name}`);
+    this.db.exec(sql);
   }
 
   public transaction<T extends BaseEntity>(
@@ -75,13 +50,7 @@ export class DataSource {
     this.db.close();
   }
 
-  getRepository<T extends BaseEntity>(entityClass: Constructor<T>) {
-    if (!this.repositories.has(entityClass)) {
-      if (!this.entities.includes(entityClass)) {
-        throw new Error(`${entityClass.name} not registered in DataSource.`);
-      }
-      this.repositories.set(entityClass, new Repository(this.db, entityClass));
-    }
-    return this.repositories.get(entityClass) as Repository<T>;
+  table<S extends TableSchema>(table: Table<S>): QueryBuilder<Infer<S>> {
+    return new QueryBuilder<Infer<S>>(this.db, table);
   }
 }
