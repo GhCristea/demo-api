@@ -2,83 +2,66 @@ import { Router } from "express";
 import { z } from "zod";
 import { CreateItemSchema } from "../../core/dto/item.dto.ts";
 import { ItemService } from "../../core/services/ItemService.ts";
-
-const IdParamSchema = z.coerce.number().min(1);
-
-const ItemQuerySchema = z.object({
-  search: z.string().optional(),
-  limit: z.coerce.number().optional()
-});
+import { route } from "./util/route.ts";
 
 export const itemsRouter = Router();
 const service = new ItemService();
 
-itemsRouter.get("/", (req, res, next) => {
-  try {
-    const params = ItemQuerySchema.parse(req.query);
-    const items = service.list(params);
+const IdParams = z.object({ id: z.coerce.number().min(1) });
+
+const ListQuery = z.object({
+  search: z.string().optional(),
+  limit: z.coerce.number().optional()
+});
+
+const BulkCreate = z.union([CreateItemSchema, z.array(CreateItemSchema)]);
+const UpdateBody = CreateItemSchema.partial();
+
+itemsRouter.get(
+  "/",
+  route({ query: ListQuery }, (req, res) => {
+    console.log(req);
+    const items = service.list(req.query);
     res.json(items);
-  } catch (err) {
-    next(err);
-  }
-});
+  })
+);
 
-itemsRouter.get("/:id", (req, res, next) => {
-  try {
-    const id = IdParamSchema.parse(req.params.id);
-    const item = service.getOne(id);
+itemsRouter.get(
+  "/:id",
+  route({ params: IdParams }, (req, res) => {
+    const item = service.getOne(req.params.id);
     res.json(item);
-  } catch (err) {
-    next(err);
-  }
-});
+  })
+);
 
-itemsRouter.post("/", (req, res, next) => {
-  try {
-    if (Array.isArray(req.body)) {
-      const items = z.array(CreateItemSchema).parse(req.body);
-      const results = service.create(items);
-      res.status(201).json(results);
-    } else {
-      const item = CreateItemSchema.parse(req.body);
-      const result = service.create(item);
-      res.status(201).json(result);
-    }
-  } catch (err) {
-    next(err);
-  }
-});
+itemsRouter.post(
+  "/",
+  route({ body: BulkCreate }, (req, res) => {
+    const result = service.create(req.body);
+    res.status(201).json(result);
+  })
+);
 
-itemsRouter.put("/:id", (req, res, next) => {
-  try {
-    const id = IdParamSchema.parse(req.params.id);
-    const body = CreateItemSchema.parse(req.body);
-
-    const result = service.update(id, body);
+itemsRouter.put(
+  "/:id",
+  route({ params: IdParams, body: CreateItemSchema }, (req, res) => {
+    const result = service.update(req.params.id, req.body);
     res.json(result);
-  } catch (err) {
-    next(err);
-  }
-});
+  })
+);
 
-itemsRouter.patch("/:id", (req, res, next) => {
-  try {
-    const id = IdParamSchema.parse(req.params.id);
-    const body = CreateItemSchema.partial().parse(req.body);
-
-    const result = service.update(id, body);
+itemsRouter.patch(
+  "/:id",
+  route({ params: IdParams, body: UpdateBody }, (req, res) => {
+    const result = service.update(req.params.id, req.body);
     res.json(result);
-  } catch (err) {
-    next(err);
-  }
-});
+  })
+);
 
-itemsRouter.delete("/:id", (req, res, next) => {
-  try {
-    const id = IdParamSchema.parse(req.params.id);
-    const result = service.delete(id);
+itemsRouter.delete(
+  "/:id",
+  route({ params: IdParams }, (req, res) => {
+    const result = service.delete(req.params.id);
     res.json(result);
-  } catch (err) {
-    next(err);
-  }
-});
+  })
+);

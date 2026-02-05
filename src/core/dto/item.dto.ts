@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const ItemRules = {
   name: z.string().min(3, "Name must be 3+ chars").max(50),
-  categoryId: z.number()
+  categoryId: z.coerce.number()
 };
 
 export const CreateItemSchema = z.object(ItemRules);
