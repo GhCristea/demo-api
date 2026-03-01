@@ -1,145 +1,93 @@
-// Router: Pure ReScript routing, no external framework
-// Parses URL and method, dispatches to handlers
-// CORS preflight handled here
-
-// ============================================================================
-// Route Matching
-// ============================================================================
-
-type method = [#GET | #POST | #PUT | #DELETE | #PATCH | #OPTIONS]
+// URL Router
+// Pattern matching on METHOD + PATH
+// Extracts route parameters and dispatches to handlers
 
 type route = {
-  method: method,
-  path: string, // e.g., "/rest/items/:id"
+  method: string,
+  pattern: string,
 }
 
-type routeMatch = {
-  handler: BunServer.fetchHandler,
-  params: Js.Dict.t<string>,
-}
+// ========================================================================
+// Route Matching
+// ========================================================================
 
-// Parse URL path and extract route parameters
-// E.g., "/rest/items/123" with pattern "/rest/items/:id" -> {id: "123"}
-let parseRoute = (pattern: string, actualPath: string): option<Js.Dict.t<string>> => {
-  let patternParts = pattern->String.split("/")->Array.filter(s => s != "")
-  let actualParts = actualPath->String.split("/")->Array.filter(s => s != "")
+// Parse path parameters from route pattern
+// /items/:id matches GET /items/42 -> {id: "42"}
+let extractParams = (pattern: string, path: string): option<Js.Dict.t<string>> => {
+  let patternParts = pattern->Js.String2.split("/")->Js.Array2.filter(s => s !== "")
+  let pathParts = path->Js.String2.split("/")->Js.Array2.filter(s => s !== "")
 
-  if Array.length(patternParts) != Array.length(actualParts) {
+  if Js.Array2.length(patternParts) !== Js.Array2.length(pathParts) {
     None
   } else {
     let params = Js.Dict.empty()
-    let matches = ref(true)
+    let matched = ref(true)
 
-    Array.forEachWithIndex(patternParts, (part, i) => {
-      if matches.contents {
-        if String.startsWith(~prefix=":", part) {
-          // This is a parameter
-          let paramName = String.slice(~from=1, part)
-          Js.Dict.set(params, paramName, actualParts[i])
-        } else if part != actualParts[i] {
-          // Literal mismatch
-          matches := false
-        }
+    for i in 0 to Js.Array2.length(patternParts) - 1 {
+      let patternPart = patternParts->Js.Array2.unsafe_get(i)
+      let pathPart = pathParts->Js.Array2.unsafe_get(i)
+
+      if Js.String2.charAt(patternPart, 0) === ":" {
+        // Parameter
+        let paramName = Js.String2.slice(patternPart, ~from=1, ~to_=Js.String2.length(patternPart))
+        params->Js.Dict.set(paramName, pathPart)
+      } else if patternPart !== pathPart {
+        // Static part doesn't match
+        matched := false
       }
-    })
+    }
 
-    matches.contents ? Some(params) : None
+    matched.contents ? Some(params) : None
   }
 }
 
-// ============================================================================
-// Router
-// ============================================================================
-
-type router = {
-  mutable routes: array<(route, BunServer.fetchHandler)>,
+// Match request to route
+type matchedRoute = {
+  handler: ItemsController.handler,
+  params: Js.Dict.t<string>,
 }
 
-let create = (): router => {
-  {
-    routes: [],
-  }
-}
-
-let register = (
-  router: router,
-  method: method,
-  path: string,
-  handler: BunServer.fetchHandler,
-): unit => {
-  let route = {method, path}
-  router.routes = Array.concat(router.routes, [(route, handler)])
-}
-
-// Parse HTTP method string to method variant
-let parseMethod = (methodStr: string): option<method> => {
-  switch methodStr->String.toUpperCase {
-  | "GET" => Some(#GET)
-  | "POST" => Some(#POST)
-  | "PUT" => Some(#PUT)
-  | "DELETE" => Some(#DELETE)
-  | "PATCH" => Some(#PATCH)
-  | "OPTIONS" => Some(#OPTIONS)
+let matchRoute = (method: string, path: string): option<matchedRoute> => {
+  switch (method, path) {
+  | ("GET", "/items") => Some({handler: ItemsController.list, params: Js.Dict.empty()})
+  | ("POST", "/items") => Some({handler: ItemsController.create, params: Js.Dict.empty()})
+  | ("GET", path) =>
+    switch extractParams("/items/:id", path) {
+    | Some(params) => Some({handler: ItemsController.get, params})
+    | None => None
+    }
+  | ("PATCH", path) =>
+    switch extractParams("/items/:id", path) {
+    | Some(params) => Some({handler: ItemsController.update, params})
+    | None => None
+    }
+  | ("DELETE", path) =>
+    switch extractParams("/items/:id", path) {
+    | Some(params) => Some({handler: ItemsController.delete, params})
+    | None => None
+    }
   | _ => None
   }
 }
 
-// Dispatch request to matching handler
-let dispatch = async (router: router, req: BunServer.request): promise<option<BunServer.response>> => {
-  // CORS preflight
-  let requestMethod = req->BunServer.method->String.toUpperCase
-  if requestMethod == "OPTIONS" {
-    Some(BunServer.corsPreflightResponse())->Promise.resolve
-  } else {
-    let url = URL.make(req->BunServer.url)
-    let pathname = url->URL.pathname
+// ========================================================================
+// Request Handler
+// ========================================================================
 
-    // Find matching route
-    let matchedRoute = ref(None)
-
-    Array.forEach(router.routes, ((route, handler)) => {
-      if Option.isNone(matchedRoute.contents) {
-        switch parseMethod(requestMethod) {
-        | Some(method) if method == route.method =>
-          switch parseRoute(route.path, pathname) {
-          | Some(params) =>
-            matchedRoute := Some((handler, params))
-          | None => ()
-          }
-        | _ => ()
-        }
-      }
-    })
-
-    switch matchedRoute.contents {
-    | Some((handler, _params)) =>
-      let response = await handler(req)
-      Some(response)->Promise.resolve
-    | None => None->Promise.resolve
-    }
+let dispatch = async (req: BunServer.request): promise<option<BunServer.response>> => {
+  let method = req->BunServer.method
+  let url = req->BunServer.url
+  
+  // Extract path from URL (remove query string)
+  let path = switch Js.String2.indexOf(url, "?") {
+  | -1 => url
+  | index => Js.String2.slice(url, ~from=0, ~to_=index)
   }
-}
 
-// ============================================================================
-// Convenience Functions
-// ============================================================================
-
-let get = (router: router, path: string, handler: BunServer.fetchHandler): unit => {
-  register(router, #GET, path, handler)
-}
-
-let post = (router: router, path: string, handler: BunServer.fetchHandler): unit => {
-  register(router, #POST, path, handler)
-}
-
-let put = (router: router, path: string, handler: BunServer.fetchHandler): unit => {
-  register(router, #PUT, path, handler)
-}
-
-let delete = (router: router, path: string, handler: BunServer.fetchHandler): unit => {
-  register(router, #DELETE, path, handler)
-}
-
-let patch = (router: router, path: string, handler: BunServer.fetchHandler): unit => {
-  register(router, #PATCH, path, handler)
+  switch matchRoute(method, path) {
+  | Some(matched) =>
+    let response = await matched.handler(req, matched.params)
+    Some(response)->Promise.resolve
+  | None => None->Promise.resolve
+  }
 }
