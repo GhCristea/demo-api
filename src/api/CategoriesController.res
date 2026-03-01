@@ -1,4 +1,4 @@
-// Items HTTP handlers
+// Categories HTTP handlers — mirrors ItemsController pattern
 // Each handler takes ~svc explicitly — no global registry access
 // Returns Handler.t (curried) so Router can bind at startup
 
@@ -12,99 +12,85 @@ let getIdParam = (params: Js.Dict.t<string>): result<int, AppError.t> =>
     Int.fromString(s)->Result.fromOption(AppError.BadRequest("id must be an integer"))
   )
 
-let getListParams = (rawUrl: string): Schema.Items.listParams => {
-  let u      = Bun.makeUrl(rawUrl)
-  let search = Bun.searchParam(u, "search")->Js.Nullable.toOption
-  let limit  = Bun.searchParam(u, "limit")->Js.Nullable.toOption->Option.flatMap(Int.fromString)
-  {search, limit}
-}
-
 // ─── Handlers ───────────────────────────────────────────────────────────────────────────────────
 
-let list = (~svc: ItemService.t): Handler.t =>
-  async (req, _params) =>
-    svc.findAll(getListParams(req->Bun.url))
-    ->Result.map(items => items->Array.map(Item.toJson)->Js.Json.array)
+let list = (~svc: CategoryService.t): Handler.t =>
+  async (_req, _params) =>
+    svc.findAll()
+    ->Result.map(cats => cats->Array.map(Category.toJson)->Js.Json.array)
     ->AppError.toResponse
 
-let get = (~svc: ItemService.t): Handler.t =>
+let get = (~svc: CategoryService.t): Handler.t =>
   async (_req, params) =>
     getIdParam(params)
     ->Result.flatMap(svc.findById)
-    ->Result.map(Item.toJson)
-    ->AppError.toResponse
-
-let getCategories = (~svc: ItemService.t, ~catSvc: CategoryService.t): Handler.t =>
-  async (_req, params) =>
-    getIdParam(params)
-    ->Result.flatMap(catSvc.findByItemId)
     ->Result.map(Category.toJson)
     ->AppError.toResponse
 
-let create = (~svc: ItemService.t): Handler.t =>
+let create = (~svc: CategoryService.t): Handler.t =>
   async (req, _params) => {
     let json = await req->Bun.json
     json
-    ->Schemas.parseCreateBody
+    ->Schemas.parseCategoryBody
     ->Result.flatMap(inputs =>
       switch inputs {
-      | [single] => svc.insert(single)->Result.map(item => [item])
+      | [single] => svc.insert(single)->Result.map(cat => [cat])
       | many     => svc.insertMany(many)
       }
     )
-    ->Result.map(items => items->Array.map(Item.toJson)->Js.Json.array)
+    ->Result.map(cats => cats->Array.map(Category.toJson)->Js.Json.array)
     ->AppError.toResponse
   }
 
-let replace = (~svc: ItemService.t): Handler.t =>
+let replace = (~svc: CategoryService.t): Handler.t =>
   async (req, params) => {
     let json = await req->Bun.json
     getIdParam(params)
     ->Result.flatMap(id =>
       json
-      ->Schemas.parseReplace
-      ->Result.map(input => ({id, name: input.name, description: input.description, categoryId: input.categoryId}: Schema.Items.replaceRow))
+      ->Schemas.parseCategoryReplace
+      ->Result.map(input => ({id, name: input.name, description: input.description}: Schema.Categories.replaceRow))
       ->Result.flatMap(svc.replace)
     )
-    ->Result.map(Item.toJson)
+    ->Result.map(Category.toJson)
     ->AppError.toResponse
   }
 
-let replaceMany = (~svc: ItemService.t): Handler.t =>
+let replaceMany = (~svc: CategoryService.t): Handler.t =>
   async (req, _params) => {
     let json = await req->Bun.json
     json
-    ->Schemas.parseReplaceMany
+    ->Schemas.parseCategoryReplaceMany
     ->Result.flatMap(svc.replaceMany)
-    ->Result.map(items => items->Array.map(Item.toJson)->Js.Json.array)
+    ->Result.map(cats => cats->Array.map(Category.toJson)->Js.Json.array)
     ->AppError.toResponse
   }
 
-let patch = (~svc: ItemService.t): Handler.t =>
+let patch = (~svc: CategoryService.t): Handler.t =>
   async (req, params) => {
     let json = await req->Bun.json
     getIdParam(params)
     ->Result.flatMap(id =>
       json
-      ->Schemas.parsePatch
+      ->Schemas.parseCategoryPatch
       ->Result.flatMap(input => svc.patch(id, input))
     )
-    ->Result.map(Item.toJson)
+    ->Result.map(Category.toJson)
     ->AppError.toResponse
   }
 
-let delete = (~svc: ItemService.t): Handler.t =>
+let delete = (~svc: CategoryService.t): Handler.t =>
   async (_req, params) =>
     getIdParam(params)
     ->Result.flatMap(svc.delete)
     ->Result.map(_ => Js.Json.null)
     ->AppError.toResponse
 
-let deleteMany = (~svc: ItemService.t): Handler.t =>
+let deleteMany = (~svc: CategoryService.t): Handler.t =>
   async (req, _params) => {
     let json = await req->Bun.json
     json
-    ->Schemas.parseDeleteMany
+    ->Schemas.parseCategoryDeleteMany
     ->Result.flatMap(svc.deleteMany)
     ->Result.map(_ => Js.Json.null)
     ->AppError.toResponse

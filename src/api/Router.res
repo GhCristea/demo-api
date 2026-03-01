@@ -20,11 +20,12 @@ let extractParams = (pattern: string, path: string): option<Js.Dict.t<string>> =
 }
 
 let make = (registry: ServiceRegistry.t): (Bun.request => promise<Bun.response>) => {
-  let items  = registry.items
-  let cats   = registry.categories
+  let items = registry.items
+  let cats  = registry.categories
 
   // Exact routes first, parameterised after — longest patterns before shorter ones
   let routes: array<(string, string, Handler.t)> = [
+    // Items
     ("GET",    "/rest/items",                ItemsController.list(~svc=items)),
     ("POST",   "/rest/items",                ItemsController.create(~svc=items)),
     ("PUT",    "/rest/items",                ItemsController.replaceMany(~svc=items)),
@@ -32,7 +33,17 @@ let make = (registry: ServiceRegistry.t): (Bun.request => promise<Bun.response>)
     ("GET",    "/rest/items/:id/categories", ItemsController.getCategories(~svc=items, ~catSvc=cats)),
     ("GET",    "/rest/items/:id",            ItemsController.get(~svc=items)),
     ("PUT",    "/rest/items/:id",            ItemsController.replace(~svc=items)),
+    ("PATCH",  "/rest/items/:id",            ItemsController.patch(~svc=items)),
     ("DELETE", "/rest/items/:id",            ItemsController.delete(~svc=items)),
+    // Categories
+    ("GET",    "/rest/categories",           CategoriesController.list(~svc=cats)),
+    ("POST",   "/rest/categories",           CategoriesController.create(~svc=cats)),
+    ("PUT",    "/rest/categories",           CategoriesController.replaceMany(~svc=cats)),
+    ("DELETE", "/rest/categories",           CategoriesController.deleteMany(~svc=cats)),
+    ("GET",    "/rest/categories/:id",       CategoriesController.get(~svc=cats)),
+    ("PUT",    "/rest/categories/:id",       CategoriesController.replace(~svc=cats)),
+    ("PATCH",  "/rest/categories/:id",       CategoriesController.patch(~svc=cats)),
+    ("DELETE", "/rest/categories/:id",       CategoriesController.delete(~svc=cats)),
   ]
 
   async (req: Bun.request): promise<Bun.response> => {
