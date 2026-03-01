@@ -4,7 +4,7 @@
 
 open S
 
-// ─── Item inputs ─────────────────────────────────────────────────────────────────
+// ─── Item schemas ─────────────────────────────────────────────────────────────
 
 // POST /rest/items single object body
 let createItem = schema(s => ({
@@ -25,7 +25,7 @@ let createItemBody = schema(s =>
   ])
 )
 
-// PUT /rest/items/:id
+// PUT /rest/items/:id — body carries fields only, id comes from URL param
 let replaceItem = schema(s => ({
   name:        s.field("name",        s.string->String.min(1)),
   description: s.field("description", s.option(s.string)),
@@ -42,12 +42,62 @@ let replaceItemWithId = schema(s => ({
 
 let replaceItems = schema(s => s.array(replaceItemWithId))
 
+// PATCH /rest/items/:id — all fields optional
+let patchItem = schema(s => ({
+  name:        s.field("name",        s.option(s.string->String.min(1))),
+  description: s.field("description", s.option(s.string)),
+  categoryId:  s.field("categoryId",  s.option(s.int)),
+}: Schema.Items.patchRow))
+
 // DELETE /rest/items bulk body: [{id}, {id}]
 let deleteItemsBody = schema(s =>
   s.array(schema(s => s.field("id", s.int)))
 )
 
-// ─── Parse helpers ──────────────────────────────────────────────────────────────
+// ─── Category schemas ──────────────────────────────────────────────────────────
+
+// POST /rest/categories
+let createCategory = schema(s => ({
+  name:        s.field("name",        s.string->String.min(1)),
+  description: s.field("description", s.option(s.string)),
+}: Schema.Categories.insertRow))
+
+let createCategories = schema(s => s.array(createCategory))
+
+let createCategoryBody = schema(s =>
+  s.union([
+    schema(s => [s.matches(createCategory)]),
+    schema(s => s.matches(createCategories)),
+  ])
+)
+
+// PUT /rest/categories/:id
+let replaceCategory = schema(s => ({
+  name:        s.field("name",        s.string->String.min(1)),
+  description: s.field("description", s.option(s.string)),
+}: Schema.Categories.insertRow))
+
+// PUT /rest/categories bulk
+let replaceCategoryWithId = schema(s => ({
+  id:          s.field("id",          s.int),
+  name:        s.field("name",        s.string->String.min(1)),
+  description: s.field("description", s.option(s.string)),
+}: Schema.Categories.replaceRow))
+
+let replaceCategories = schema(s => s.array(replaceCategoryWithId))
+
+// PATCH /rest/categories/:id — all fields optional
+let patchCategory = schema(s => ({
+  name:        s.field("name",        s.option(s.string->String.min(1))),
+  description: s.field("description", s.option(s.string)),
+}: Schema.Categories.patchRow))
+
+// DELETE /rest/categories bulk body
+let deleteCategoriesBody = schema(s =>
+  s.array(schema(s => s.field("id", s.int)))
+)
+
+// ─── Parse helpers ─────────────────────────────────────────────────────────────
 
 let parse = (schema, json): result<'a, AppError.t> =>
   switch schema->S.parseOrThrow(json) {
@@ -55,7 +105,16 @@ let parse = (schema, json): result<'a, AppError.t> =>
   | exception S.Error(e) => Error(AppError.ValidationError([S.Error.message(e)]))
   }
 
-let parseCreateBody   = (json: Js.Json.t) => parse(createItemBody,    json)
-let parseReplace      = (json: Js.Json.t) => parse(replaceItem,        json)
-let parseReplaceMany  = (json: Js.Json.t) => parse(replaceItems,       json)
-let parseDeleteMany   = (json: Js.Json.t) => parse(deleteItemsBody,    json)
+// Items
+let parseCreateBody       = (json: Js.Json.t) => parse(createItemBody,    json)
+let parseReplace          = (json: Js.Json.t) => parse(replaceItem,        json)
+let parseReplaceMany      = (json: Js.Json.t) => parse(replaceItems,       json)
+let parsePatch            = (json: Js.Json.t) => parse(patchItem,          json)
+let parseDeleteMany       = (json: Js.Json.t) => parse(deleteItemsBody,    json)
+
+// Categories
+let parseCategoryBody         = (json: Js.Json.t) => parse(createCategoryBody,   json)
+let parseCategoryReplace      = (json: Js.Json.t) => parse(replaceCategory,       json)
+let parseCategoryReplaceMany  = (json: Js.Json.t) => parse(replaceCategories,     json)
+let parseCategoryPatch        = (json: Js.Json.t) => parse(patchCategory,         json)
+let parseCategoryDeleteMany   = (json: Js.Json.t) => parse(deleteCategoriesBody,  json)
