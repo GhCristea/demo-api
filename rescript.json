@@ -1,7 +1,10 @@
 {
   "name": "demo-api",
   "version": "11.1.0",
-  "sources": ["src"],
+  "sources": [
+    { "dir": "src", "subdirs": true },
+    { "dir": "test", "subdirs": true, "type": "dev" }
+  ],
   "package-specs": {
     "module": "es6",
     "in-source": true
