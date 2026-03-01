@@ -1,18 +1,9 @@
 // Application entry point
-// Initializes database, sets up Express, starts server
-
-open Express
+// Pure Bun.serve + ReScript, zero external HTTP dependencies
 
 let main = async (): promise<unit> => {
-  let app = express()
   let port = 3001
-
-  // ========================================================================
-  // Middleware
-  // ========================================================================
-
-  app->use(cors())
-  app->use(json())
+  let hostname = "0.0.0.0"
 
   // ========================================================================
   // Database Initialization
@@ -28,36 +19,44 @@ let main = async (): promise<unit> => {
   }
 
   // ========================================================================
-  // Routes
+  // Router Setup
   // ========================================================================
 
-  let itemRouter = ItemsRouter.itemRouter()
-  app->useRouter("/rest/items", itemRouter)
+  let router = Router.create()
+
+  // Items endpoints
+  Router.get(router, "/rest/items", ItemsController.list)
+  Router.get(router, "/rest/items/:id", ItemsController.get)
+  Router.post(router, "/rest/items", ItemsController.create)
+  Router.put(router, "/rest/items/:id", ItemsController.update)
+  Router.delete(router, "/rest/items/:id", ItemsController.delete)
 
   // ========================================================================
-  // Error Handler (must be last)
+  // Request Handler
   // ========================================================================
 
-  let errorHandler: errorHandler = async (err, _req, res, _next) => {
-    let message = switch err {
-    | None => "Unknown error"
-    | Some(e) => Js.Error.message(e)
+  let handleRequest = async (req: BunServer.request): promise<BunServer.response> => {
+    // Try to find a matching route
+    switch await Router.dispatch(router, req) {
+    | Some(response) => response->Promise.resolve
+    | None =>
+      // No route matched
+      let errorResp = AppError.toResponse(AppError.internal("Not Found"))
+      BunServer.json(~status=404, errorResp)->Promise.resolve
     }
-
-    let errorResp = AppError.toResponse(AppError.internal(message))
-    let _ = res->status(errorResp["status"])->json(errorResp)
-    ()
   }
 
-  app->useErrorHandler(errorHandler)
-
   // ========================================================================
-  // Start Server
+  // Start Bun Server
   // ========================================================================
 
-  app->listen(port, () => {
-    Console.log(`[Server] Running on http://localhost:${Int.toString(port)}`)
+  let _server = BunServer.serve({
+    fetch: handleRequest,
+    port,
+    hostname,
   })
+
+  Console.log(`[Server] Running on http://localhost:${Int.toString(port)}`)
 
   // ========================================================================
   // Graceful Shutdown
