@@ -1,0 +1,19 @@
+{
+  "name": "demo-api",
+  "version": "0.1.0",
+  "sources": [
+    {
+      "dir": "src",
+      "subdirs": true
+    }
+  ],
+  "package-specs": [
+    {
+      "module-system": "esmodule",
+      "in-source": true
+    }
+  ],
+  "suffix": ".res.js",
+  "bs-dependencies": ["rescript-schema"],
+  "bsc-flags": ["-open RescriptCore"]
+}
