@@ -1,16 +1,35 @@
 {
+  "name": "demo-api",
+  "version": "1.0.0",
   "type": "module",
+  "description": "Zero-dependency REST API: Bun + ReScript + rescript-schema",
+  "bin": {
+    "demo-api": "dist/index.js"
+  },
   "scripts": {
-    "dev": "bun --watch src/index.res.js",
-    "build": "rescript build",
-    "build:watch": "rescript build -w",
-    "typecheck": "rescript build"
+    "dev": "bun run src/index.res",
+    "build": "rescript build -to-js",
+    "watch": "rescript build -to-js -w",
+    "start": "bun dist/index.js",
+    "db:migrate": "bun db/migrate.js",
+    "db:seed": "bun db/seed.js"
   },
   "dependencies": {
-    "rescript-schema": "^2.14.0"
+    "bun": "latest",
+    "rescript": "^11.1.0",
+    "rescript-schema": "^2.1.0"
   },
   "devDependencies": {
-    "rescript": "^11.1.4"
+    "@types/bun": "latest"
   },
-  "_note": "Pure ReScript + Bun. No external HTTP or database libraries. Everything is built-in or ReScript."
+  "keywords": [
+    "bun",
+    "rescript",
+    "rest",
+    "api",
+    "zero-dependency",
+    "minimal"
+  ],
+  "author": "Gheorghita Cristea",
+  "license": "MIT"
 }
