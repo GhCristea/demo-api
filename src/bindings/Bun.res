@@ -1,5 +1,5 @@
 // Bun FFI bindings
-// Covers: HTTP server, SQLite, URL parsing, process
+// Covers: HTTP server, SQLite, URL parsing (pathname + searchParams), process
 // Keep bindings minimal — only bind what is used
 
 // ─── HTTP ────────────────────────────────────────────────────────────────────
@@ -11,7 +11,6 @@ type response
 @send external url: request => string = "url"
 @send external json: request => promise<Js.Json.t> = "json"
 
-// Correct JSON response — uses the Response constructor with init options
 @new external makeResponse: (string, {"status": int, "headers": {"content-type": string}}) => response = "Response"
 
 let jsonResponse = (~status: int=200, data: Js.Json.t): response =>
@@ -33,12 +32,14 @@ type server = {hostname: string, port: int}
 
 // ─── URL ─────────────────────────────────────────────────────────────────────
 
-type url
-@new external makeUrl: string => url = "URL"
-@get external pathname: url => string = "pathname"
+type urlObj
+@new external makeUrl: string => urlObj = "URL"
+@get external pathname: urlObj => string = "pathname"
+// searchParams.get(key) returns null when key is absent
+@send external searchParamsGet: (urlObj, string) => Js.Nullable.t<string> = "searchParams.get"
 
-let getPathname = (rawUrl: string): string =>
-  rawUrl->makeUrl->pathname
+let getPathname = (rawUrl: string): string => rawUrl->makeUrl->pathname
+let searchParam = (u: urlObj, key: string): Js.Nullable.t<string> => u->searchParamsGet(key)
 
 // ─── SQLite ───────────────────────────────────────────────────────────────────
 

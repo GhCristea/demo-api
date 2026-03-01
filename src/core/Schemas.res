@@ -1,31 +1,61 @@
 // Validation schemas — single source of truth for all API inputs
 // Uses rescript-schema: schema IS the type (S.Output.t)
-// No manual type duplication
+// Polymorphic POST body: S.union handles both single object and array
 
 open S
 
-let createItem = schema(s => {
-  name: s.field("name", s.string->String.min(1)),
+// ─── Item inputs ─────────────────────────────────────────────────────────────────
+
+// POST /rest/items single object body
+let createItem = schema(s => ({
+  name:        s.field("name",        s.string->String.min(1)),
   description: s.field("description", s.option(s.string)),
-})
+  categoryId:  s.field("categoryId",  s.int),
+}: Schema.Items.insertRow))
 
-let updateItem = schema(s => {
-  name: s.field("name", s.option(s.string->String.min(1))),
+// POST /rest/items array body
+let createItems = schema(s => s.array(createItem))
+
+// Polymorphic POST body — single object OR array
+// Returns array in both cases for uniform handling downstream
+let createItemBody = schema(s =>
+  s.union([
+    schema(s => [s.matches(createItem)]),
+    schema(s => s.matches(createItems)),
+  ])
+)
+
+// PUT /rest/items/:id
+let replaceItem = schema(s => ({
+  name:        s.field("name",        s.string->String.min(1)),
   description: s.field("description", s.option(s.string)),
-})
+  categoryId:  s.field("categoryId",  s.int),
+}: Schema.Items.insertRow))
 
-type createInput = S.Output.t<typeof createItem>
-type updateInput = S.Output.t<typeof updateItem>
+// PUT /rest/items bulk — each item must include its id
+let replaceItemWithId = schema(s => ({
+  id:          s.field("id",          s.int),
+  name:        s.field("name",        s.string->String.min(1)),
+  description: s.field("description", s.option(s.string)),
+  categoryId:  s.field("categoryId",  s.int),
+}: Schema.Items.replaceRow))
 
-// Parse helpers — boundary between untyped JSON and typed domain
-let parseCreate = (json: Js.Json.t): result<createInput, AppError.t> =>
-  switch createItem->S.parseOrThrow(json) {
-  | input => Ok(input)
+let replaceItems = schema(s => s.array(replaceItemWithId))
+
+// DELETE /rest/items bulk body: [{id}, {id}]
+let deleteItemsBody = schema(s =>
+  s.array(schema(s => s.field("id", s.int)))
+)
+
+// ─── Parse helpers ──────────────────────────────────────────────────────────────
+
+let parse = (schema, json): result<'a, AppError.t> =>
+  switch schema->S.parseOrThrow(json) {
+  | v => Ok(v)
   | exception S.Error(e) => Error(AppError.ValidationError([S.Error.message(e)]))
   }
 
-let parseUpdate = (json: Js.Json.t): result<updateInput, AppError.t> =>
-  switch updateItem->S.parseOrThrow(json) {
-  | input => Ok(input)
-  | exception S.Error(e) => Error(AppError.ValidationError([S.Error.message(e)]))
-  }
+let parseCreateBody   = (json: Js.Json.t) => parse(createItemBody,    json)
+let parseReplace      = (json: Js.Json.t) => parse(replaceItem,        json)
+let parseReplaceMany  = (json: Js.Json.t) => parse(replaceItems,       json)
+let parseDeleteMany   = (json: Js.Json.t) => parse(deleteItemsBody,    json)
