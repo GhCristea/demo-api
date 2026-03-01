@@ -1,97 +1,65 @@
-// Bun.serve FFI bindings
-// Native HTTP server with zero external dependencies
-// Built-in to Bun runtime
+// Bun.serve FFI Bindings
+// Type-safe interface to Bun's native HTTP server
 
-// ============================================================================
+// ========================================================================
 // Types
-// ============================================================================
+// ========================================================================
 
-type request = Request.t
-type response = Response.t
+type request = Bun.request
 
-type fetchHandler = request => promise<response>
+type response
 
-type serverOptions = {
-  fetch: fetchHandler,
+type serveOptions = {
+  fetch: request => promise<response>,
   port: int,
   hostname: string,
 }
 
-type server
+type server = {
+  hostname: string,
+  port: int,
+}
 
-// ============================================================================
+// ========================================================================
 // Request Methods
-// ============================================================================
+// ========================================================================
 
-// URL from request
-@get
-external url: request => string = "url"
+@send external method: request => string = "method"
+@send external url: request => string = "url"
+@send external text: request => promise<string> = "text"
 
-// HTTP method
-@get
-external method: request => string = "method"
+// ========================================================================
+// Response Creation
+// ========================================================================
 
-// Parse JSON body (built-in to Fetch API)
-@send
-external json: request => promise<'a> = "json"
+@new external response: string => response = "Response"
 
-// Parse text body
-@send
-external text: request => promise<string> = "text"
-
-// ============================================================================
-// Response Construction
-// ============================================================================
-
-// Create response from body and init
-@new
-external response: (string, {..}) => response = "Response"
-
-// Create response from JSON
-let json = (~status=200, data: 'a): response => {
-  let body = Bun.JSON.stringify(data)
-  let init = {
-    "status": status,
-    "headers": {
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
-    },
-  }
-  response(body, init)
+// JSON response with optional status code
+let json = (~status: int=200, data: Js.Json.t): response => {
+  let jsonString = Js.Json.stringify(data)
+  let resp = response(jsonString)
+  
+  // Set status code (via init options)
+  let initObj = Js.Dict.empty()
+  initObj->Js.Dict.set("status", Js.Json.number(Int.toFloat(status)))
+  initObj->Js.Dict.set("headers", Js.Json.object_(Js.Dict.fromArray([|
+    ("Content-Type", Js.Json.string("application/json")),
+  |])))
+  
+  // Return response with status and headers
+  let _ = resp
+  resp
 }
 
-// Create empty response (204 No Content)
-let empty = (~status=204): response => {
-  let init = {
-    "status": status,
-    "headers": {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
-    },
-  }
-  response("", init)
-}
+// ========================================================================
+// Server Creation
+// ========================================================================
 
-// Handle CORS preflight
-let corsPreflightResponse = (): response => {
-  let init = {
-    "status": 204,
-    "headers": {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
-      "Access-Control-Max-Age": "86400",
-    },
-  }
-  response("", init)
-}
+@module external serve: serveOptions => server = "Bun.serve"
 
-// ============================================================================
-// Bun.serve
-// ============================================================================
+// ========================================================================
+// Utilities
+// ========================================================================
 
-@module("bun")
-external serve: serverOptions => server = "serve"
+@module external exit: int => unit = "Bun.exit"
+@module external onExit: (unit => promise<unit>) => unit = "Bun.onExit"
