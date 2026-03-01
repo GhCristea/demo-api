@@ -13,19 +13,14 @@ type t = {
 }
 
 let toJson = (item: t): Js.Json.t =>
-  Js.Json.object_(
-    Js.Dict.fromArray([
-      ("id",          Js.Json.number(Int.toFloat(item.id))),
-      ("name",        Js.Json.string(item.name)),
-      ("description", switch item.description {
-        | Some(d) => Js.Json.string(d)
-        | None    => Js.Json.null
-      }),
-      ("categoryId",  Js.Json.number(Int.toFloat(item.categoryId))),
-      ("createdAt",   Js.Json.number(item.createdAt)),
-      ("updatedAt",   Js.Json.number(item.updatedAt)),
-    ])
-  )
+  Json.obj([
+    ("id",          Json.int(item.id)),
+    ("name",        Json.str(item.name)),
+    ("description", Json.opt(item.description)),
+    ("categoryId",  Json.int(item.categoryId)),
+    ("createdAt",   Json.num(item.createdAt)),
+    ("updatedAt",   Json.num(item.updatedAt)),
+  ])
 
 let fromRow = (row: Schema.Items.row): t => {
   id:          row["id"],
