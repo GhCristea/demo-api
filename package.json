@@ -4,28 +4,13 @@
     "dev": "bun --watch src/index.res.js",
     "build": "rescript build",
     "build:watch": "rescript build -w",
-    "typecheck": "rescript build",
-    "lint": "eslint ./src",
-    "lint:fix": "eslint ./src --fix"
+    "typecheck": "rescript build"
   },
   "dependencies": {
-    "cors": "^2.8.6",
-    "express": "^5.2.1",
     "rescript-schema": "^2.14.0"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.2",
-    "@types/cors": "^2.8.19",
-    "@types/express": "^5.0.6",
-    "@types/node": "^25.0.10",
-    "eslint": "^9.39.2",
-    "rescript": "^11.1.4",
-    "typescript-eslint": "^8.54.0"
+    "rescript": "^11.1.4"
   },
-  "devDependencies:removed": {
-    "better-sqlite3": "removed — Bun.sql/bun:sqlite built-in",
-    "@types/better-sqlite3": "removed",
-    "tsx": "removed — Bun native TypeScript runner",
-    "typescript": "removed — ReScript provides type safety"
-  }
+  "_note": "Pure ReScript + Bun. No external HTTP or database libraries. Everything is built-in or ReScript."
 }
