@@ -1,26 +1,31 @@
 {
   "type": "module",
   "scripts": {
-    "dev": "NODE_ENV=development tsx watch src/index.ts",
+    "dev": "bun --watch src/index.res.js",
+    "build": "rescript build",
+    "build:watch": "rescript build -w",
+    "typecheck": "rescript build",
     "lint": "eslint ./src",
-    "lint:fix": "eslint ./src --fix",
-    "typecheck": "tsc --noEmit"
+    "lint:fix": "eslint ./src --fix"
   },
   "dependencies": {
-    "better-sqlite3": "^12.6.2",
     "cors": "^2.8.6",
     "express": "^5.2.1",
-    "zod": "^4.3.6"
+    "rescript-schema": "^2.14.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
-    "@types/better-sqlite3": "^7.6.13",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^25.0.10",
     "eslint": "^9.39.2",
-    "tsx": "^4.21.0",
-    "typescript": "^5.9.3",
+    "rescript": "^11.1.4",
     "typescript-eslint": "^8.54.0"
+  },
+  "devDependencies:removed": {
+    "better-sqlite3": "removed — Bun.sql/bun:sqlite built-in",
+    "@types/better-sqlite3": "removed",
+    "tsx": "removed — Bun native TypeScript runner",
+    "typescript": "removed — ReScript provides type safety"
   }
 }
