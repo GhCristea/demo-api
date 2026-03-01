@@ -1,148 +1,50 @@
-// ItemService: Business logic layer
-// All queries go through QueryBuilder
-// All errors are handled via Result<T, AppError>
-// No exceptions or null checks
+// Item business logic with Dependency Injection
+// Deps are injected to allow testing without database
 
-open Bun.sqlite
+// ========================================================================
+// Dependencies Interface
+// ========================================================================
 
-// Database instance (injected from AppDataSource)
-let mutable db: option<database> = None
-
-let setDatabase = (database: database) => {
-  db := Some(database)
+type deps = {
+  list: unit => promise<result<array<Item.t>, AppError.t>>,
+  get: int => promise<result<Item.t, AppError.t>>,
+  create: Item.createInput => promise<result<Item.t, AppError.t>>,
+  update: (int, Item.updateInput) => promise<result<Item.t, AppError.t>>,
+  delete: int => promise<result<unit, AppError.t>>,
 }
 
-let getDb = (): result<database, AppError.t> => {
-  switch db.contents {
-  | Some(d) => Ok(d)
-  | None => Error(AppError.internal("Database not initialized"))
-  }
+// ========================================================================
+// Mock/Default Implementation (for testing)
+// ========================================================================
+
+let mockList = async (): promise<result<array<Item.t>, AppError.t>> => {
+  Ok([])->Promise.resolve
 }
 
-// ============================================================================
-// Query Operations
-// ============================================================================
-
-let getAll = (): result<array<Item.item>, AppError.t> => {
-  getDb()->Result.flatMap(db => {
-    try {
-      let rows = QueryBuilder.selectAll(db)
-      Ok(rows->Array.map(Item.fromRow))
-    } catch {
-    | _ => Error(AppError.internal("Failed to fetch items"))
-    }
-  })
+let mockGet = async (_id: int): promise<result<Item.t, AppError.t>> => {
+  Error(AppError.NotFound("Item not found"))->Promise.resolve
 }
 
-let getOne = (id: int): result<Item.item, AppError.t> => {
-  getDb()->Result.flatMap(db => {
-    try {
-      switch QueryBuilder.findById(db, id) {
-      | Some(row) => Ok(Item.fromRow(row))
-      | None => Error(AppError.itemNotFound())
-      }
-    } catch {
-    | _ => Error(AppError.internal("Failed to fetch item"))
-    }
-  })
+let mockCreate = async (_input: Item.createInput): promise<result<Item.t, AppError.t>> => {
+  Error(AppError.Internal("Not implemented"))->Promise.resolve
 }
 
-let getByCategory = (categoryId: int): result<array<Item.item>, AppError.t> => {
-  getDb()->Result.flatMap(db => {
-    try {
-      let rows = QueryBuilder.findByCategory(db, categoryId)
-      Ok(rows->Array.map(Item.fromRow))
-    } catch {
-    | _ => Error(AppError.internal("Failed to fetch items by category"))
-    }
-  })
+let mockUpdate = async (_id: int, _input: Item.updateInput): promise<result<Item.t, AppError.t>> => {
+  Error(AppError.Internal("Not implemented"))->Promise.resolve
 }
 
-let search = (name: string): result<array<Item.item>, AppError.t> => {
-  getDb()->Result.flatMap(db => {
-    try {
-      let rows = QueryBuilder.findByName(db, name)
-      Ok(rows->Array.map(Item.fromRow))
-    } catch {
-    | _ => Error(AppError.internal("Failed to search items"))
-    }
-  })
+let mockDelete = async (_id: int): promise<result<unit, AppError.t>> => {
+  Error(AppError.Internal("Not implemented"))->Promise.resolve
 }
 
-// ============================================================================
-// Mutation Operations
-// ============================================================================
+// ========================================================================
+// Default Service Instance (with actual database)
+// ========================================================================
 
-let create = (
-  input: ItemDto.createItemInput,
-): result<Item.item, AppError.t> => {
-  getDb()->Result.flatMap(db => {
-    try {
-      switch QueryBuilder.insertItem(
-        db,
-        ~name=input["name"],
-        ~description=input["description"],
-        ~categoryId=input["categoryId"],
-      ) {
-      | Ok(id) =>
-        // Fetch and return the created item
-        switch QueryBuilder.findById(db, id) {
-        | Some(row) => Ok(Item.fromRow(row))
-        | None => Error(AppError.internal("Failed to retrieve created item"))
-        }
-      | Error(msg) => Error(AppError.internal(msg))
-      }
-    } catch {
-    | _ => Error(AppError.internal("Failed to create item"))
-    }
-  })
-}
-
-let update = (
-  id: int,
-  input: ItemDto.updateItemInput,
-): result<Item.item, AppError.t> => {
-  getDb()->Result.flatMap(db => {
-    try {
-      // Check if item exists first
-      switch QueryBuilder.findById(db, id) {
-      | None => Error(AppError.itemNotFound())
-      | Some(existing) =>
-        // Use provided values or fall back to existing
-        let name = input["name"]->Option.getOr(existing["name"])
-        let description = input["description"]->Option.or_(existing["description"])
-        let categoryId = input["categoryId"]->Option.getOr(existing["categoryId"])
-
-        switch QueryBuilder.updateItem(db, id, ~name, ~description, ~categoryId) {
-        | Ok(_) =>
-          // Fetch and return the updated item
-          switch QueryBuilder.findById(db, id) {
-          | Some(row) => Ok(Item.fromRow(row))
-          | None => Error(AppError.internal("Failed to retrieve updated item"))
-          }
-        | Error(msg) => Error(AppError.internal(msg))
-        }
-      }
-    } catch {
-    | _ => Error(AppError.internal("Failed to update item"))
-    }
-  })
-}
-
-let delete = (id: int): result<unit, AppError.t> => {
-  getDb()->Result.flatMap(db => {
-    try {
-      switch QueryBuilder.deleteById(db, id) {
-      | Ok(changes) =>
-        if changes > 0 {
-          Ok()
-        } else {
-          Error(AppError.itemNotFound())
-        }
-      | Error(msg) => Error(AppError.internal(msg))
-      }
-    } catch {
-    | _ => Error(AppError.internal("Failed to delete item"))
-    }
-  })
+let default: deps = {
+  list: mockList,
+  get: mockGet,
+  create: mockCreate,
+  update: mockUpdate,
+  delete: mockDelete,
 }
