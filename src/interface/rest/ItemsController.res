@@ -1,180 +1,161 @@
-// ItemsController: HTTP handlers using Bun.serve
-// All handlers take Fetch API Request, return Fetch API Response
+// Items REST API handlers
+// Polymorphic handlers with inline request parsing
+// Type: request -> promise<response>
 
-open BunServer
+// ========================================================================
+// Handler Type
+// ========================================================================
 
-// ============================================================================
-// Helper: Parse JSON body with error handling
-// ============================================================================
+type handler = BunServer.request => promise<BunServer.response>
 
-let parseJsonBody = async (req: request): promise<result<'a, string>> => {
+// ========================================================================
+// Helper: Read Request Body
+// ========================================================================
+
+let readBody = async (req: BunServer.request): promise<string> => {
   try {
-    let body = await req->json
-    Ok(body)->Promise.resolve
+    let body = await req->BunServer.text
+    body->Promise.resolve
   } catch {
-  | _ => Error("Invalid JSON")->Promise.resolve
+  | _ => ""->Promise.resolve
   }
 }
 
-// ============================================================================
-// Helper: Parse URL parameters
-// ============================================================================
+// ========================================================================
+// Helper: Extract URL Parameter
+// ========================================================================
 
-let getIdParam = (url: URL.t): result<int, string> => {
-  // URL pathname is "/rest/items/:id"
-  // We extract the ID from the route params passed by Router
-  // For now, simplified: just try to parse last segment
-  let pathname = url->URL.pathname
-  let parts = pathname->String.split("/")->Array.filter(s => s != "")
-  
-  switch parts {
-  | [_, _, id] =>
-    switch Int.fromString(id) {
-    | Some(num) => Ok(num)
-    | None => Error("Invalid ID format")
+let getIdParam = (params: Js.Dict.t<string>, key: string): option<int> => {
+  switch params->Js.Dict.get(key) {
+  | Some(idStr) =>
+    switch Belt.Int.fromString(idStr) {
+    | Some(id) => Some(id)
+    | None => None
     }
-  | _ => Error("Missing ID parameter")
+  | None => None
   }
 }
 
-// ============================================================================
-// GET /rest/items
-// ============================================================================
+// ========================================================================
+// Handlers
+// ========================================================================
 
-let list = async (req: request): promise<response> => {
-  switch await ItemService.getAll() {
+// GET /items
+let list = async (_req: BunServer.request): promise<BunServer.response> => {
+  let result = await ItemService.default.list()
+  switch result {
   | Ok(items) =>
-    let responses = items->Array.map(ItemDto.toResponse)
-    json(~status=200, {"data": responses})->Promise.resolve
-  | Error(err) =>
-    let errorResp = AppError.toResponse(err)
-    json(~status=errorResp["status"], errorResp)->Promise.resolve
+    let json = Js.Json.array(items->Js.Array2.map(item =>
+      Js.Json.object_(Js.Dict.fromArray([|
+        ("id", Js.Json.number(Int.toFloat(item.id))),
+        ("name", Js.Json.string(item.name)),
+        ("description", switch item.description {
+        | Some(desc) => Js.Json.string(desc)
+        | None => Js.Json.null
+        }),
+        ("createdAt", Js.Json.number(item.createdAt)),
+        ("updatedAt", Js.Json.number(item.updatedAt)),
+      |]))
+    ))
+    BunServer.json(~status=200, json)->Promise.resolve
+  | Error(err) => AppError.toResponse(err)->Promise.resolve
   }
 }
 
-// ============================================================================
-// GET /rest/items/:id
-// ============================================================================
+// GET /items/:id
+let get = async (req: BunServer.request, params: Js.Dict.t<string>): promise<BunServer.response> => {
+  switch getIdParam(params, "id") {
+  | Some(id) =>
+    let result = await ItemService.default.get(id)
+    switch result {
+    | Ok(item) =>
+      let json = Js.Json.object_(Js.Dict.fromArray([|
+        ("id", Js.Json.number(Int.toFloat(item.id))),
+        ("name", Js.Json.string(item.name)),
+        ("description", switch item.description {
+        | Some(desc) => Js.Json.string(desc)
+        | None => Js.Json.null
+        }),
+        ("createdAt", Js.Json.number(item.createdAt)),
+        ("updatedAt", Js.Json.number(item.updatedAt)),
+      |]))
+      BunServer.json(~status=200, json)->Promise.resolve
+    | Error(err) => AppError.toResponse(err)->Promise.resolve
+    }
+  | None =>
+    AppError.toResponse(AppError.NotFound("Invalid item ID"))->Promise.resolve
+  }
+}
 
-let get = async (req: request): promise<response> => {
-  try {
-    let url = URL.make(req->url)
-    switch getIdParam(url) {
-    | Error(msg) =>
-      let errorResp = AppError.toResponse(AppError.internal(msg))
-      json(~status=400, errorResp)->Promise.resolve
-    | Ok(id) =>
-      switch await ItemService.getOne(id) {
+// POST /items
+let create = async (req: BunServer.request, _params: Js.Dict.t<string>): promise<BunServer.response> => {
+  let body = await readBody(req)
+  let parseResult = Schemas.parseCreateInput(body)
+  switch parseResult {
+  | Ok(input) =>
+    let result = await ItemService.default.create(input)
+    switch result {
+    | Ok(item) =>
+      let json = Js.Json.object_(Js.Dict.fromArray([|
+        ("id", Js.Json.number(Int.toFloat(item.id))),
+        ("name", Js.Json.string(item.name)),
+        ("description", switch item.description {
+        | Some(desc) => Js.Json.string(desc)
+        | None => Js.Json.null
+        }),
+        ("createdAt", Js.Json.number(item.createdAt)),
+        ("updatedAt", Js.Json.number(item.updatedAt)),
+      |]))
+      BunServer.json(~status=201, json)->Promise.resolve
+    | Error(err) => AppError.toResponse(err)->Promise.resolve
+    }
+  | Error(errors) =>
+    AppError.toResponse(AppError.ValidationError(errors))->Promise.resolve
+  }
+}
+
+// PATCH /items/:id
+let update = async (req: BunServer.request, params: Js.Dict.t<string>): promise<BunServer.response> => {
+  switch getIdParam(params, "id") {
+  | Some(id) =>
+    let body = await readBody(req)
+    let parseResult = Schemas.parseUpdateInput(body)
+    switch parseResult {
+    | Ok(input) =>
+      let result = await ItemService.default.update(id, input)
+      switch result {
       | Ok(item) =>
-        let response = ItemDto.toResponse(item)
-        json(~status=200, {"data": response})->Promise.resolve
-      | Error(err) =>
-        let errorResp = AppError.toResponse(err)
-        json(~status=errorResp["status"], errorResp)->Promise.resolve
+        let json = Js.Json.object_(Js.Dict.fromArray([|
+          ("id", Js.Json.number(Int.toFloat(item.id))),
+          ("name", Js.Json.string(item.name)),
+          ("description", switch item.description {
+          | Some(desc) => Js.Json.string(desc)
+          | None => Js.Json.null
+          }),
+          ("createdAt", Js.Json.number(item.createdAt)),
+          ("updatedAt", Js.Json.number(item.updatedAt)),
+        |]))
+        BunServer.json(~status=200, json)->Promise.resolve
+      | Error(err) => AppError.toResponse(err)->Promise.resolve
       }
+    | Error(errors) =>
+      AppError.toResponse(AppError.ValidationError(errors))->Promise.resolve
     }
-  } catch {
-  | _ =>
-    let errorResp = AppError.toResponse(AppError.internal("Invalid request"))
-    json(~status=400, errorResp)->Promise.resolve
+  | None =>
+    AppError.toResponse(AppError.NotFound("Invalid item ID"))->Promise.resolve
   }
 }
 
-// ============================================================================
-// POST /rest/items
-// ============================================================================
-
-let create = async (req: request): promise<response> => {
-  try {
-    switch await parseJsonBody(req) {
-    | Error(msg) =>
-      let errorResp = AppError.toResponse(AppError.internal(msg))
-      json(~status=400, errorResp)->Promise.resolve
-    | Ok(body) =>
-      switch ItemDto.validateCreateItem(body) {
-      | Error(msg) =>
-        let errorResp = AppError.toResponse(AppError.validationFailed([msg]))
-        json(~status=400, errorResp)->Promise.resolve
-      | Ok(input) =>
-        switch await ItemService.create(input) {
-        | Ok(item) =>
-          let response = ItemDto.toResponse(item)
-          json(~status=201, {"data": response})->Promise.resolve
-        | Error(err) =>
-          let errorResp = AppError.toResponse(err)
-          json(~status=errorResp["status"], errorResp)->Promise.resolve
-        }
-      }
+// DELETE /items/:id
+let delete = async (_req: BunServer.request, params: Js.Dict.t<string>): promise<BunServer.response> => {
+  switch getIdParam(params, "id") {
+  | Some(id) =>
+    let result = await ItemService.default.delete(id)
+    switch result {
+    | Ok(()) => BunServer.json(~status=204, Js.Json.null)->Promise.resolve
+    | Error(err) => AppError.toResponse(err)->Promise.resolve
     }
-  } catch {
-  | _ =>
-    let errorResp = AppError.toResponse(AppError.internal("Request parsing failed"))
-    json(~status=400, errorResp)->Promise.resolve
-  }
-}
-
-// ============================================================================
-// PUT /rest/items/:id
-// ============================================================================
-
-let update = async (req: request): promise<response> => {
-  try {
-    let url = URL.make(req->url)
-    switch getIdParam(url) {
-    | Error(msg) =>
-      let errorResp = AppError.toResponse(AppError.internal(msg))
-      json(~status=400, errorResp)->Promise.resolve
-    | Ok(id) =>
-      switch await parseJsonBody(req) {
-      | Error(msg) =>
-        let errorResp = AppError.toResponse(AppError.internal(msg))
-        json(~status=400, errorResp)->Promise.resolve
-      | Ok(body) =>
-        switch ItemDto.validateUpdateItem(body) {
-        | Error(msg) =>
-          let errorResp = AppError.toResponse(AppError.validationFailed([msg]))
-          json(~status=400, errorResp)->Promise.resolve
-        | Ok(input) =>
-          switch await ItemService.update(id, input) {
-          | Ok(item) =>
-            let response = ItemDto.toResponse(item)
-            json(~status=200, {"data": response})->Promise.resolve
-          | Error(err) =>
-            let errorResp = AppError.toResponse(err)
-            json(~status=errorResp["status"], errorResp)->Promise.resolve
-          }
-        }
-      }
-    }
-  } catch {
-  | _ =>
-    let errorResp = AppError.toResponse(AppError.internal("Invalid request"))
-    json(~status=400, errorResp)->Promise.resolve
-  }
-}
-
-// ============================================================================
-// DELETE /rest/items/:id
-// ============================================================================
-
-let delete = async (req: request): promise<response> => {
-  try {
-    let url = URL.make(req->url)
-    switch getIdParam(url) {
-    | Error(msg) =>
-      let errorResp = AppError.toResponse(AppError.internal(msg))
-      json(~status=400, errorResp)->Promise.resolve
-    | Ok(id) =>
-      switch await ItemService.delete(id) {
-      | Ok() => empty(~status=204)->Promise.resolve
-      | Error(err) =>
-        let errorResp = AppError.toResponse(err)
-        json(~status=errorResp["status"], errorResp)->Promise.resolve
-      }
-    }
-  } catch {
-  | _ =>
-    let errorResp = AppError.toResponse(AppError.internal("Invalid item ID"))
-    json(~status=400, errorResp)->Promise.resolve
+  | None =>
+    AppError.toResponse(AppError.NotFound("Invalid item ID"))->Promise.resolve
   }
 }
