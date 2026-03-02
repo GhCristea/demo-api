@@ -18,13 +18,16 @@
   },
   "dependencies": {
     "bun": "latest",
-    "rescript": "^11.1.0",
-    "rescript-schema": "^2.1.0"
+    "rescript": "^12.2.0 ",
+    "rescript-schema": "^9.3.4"
   },
   "devDependencies": {
     "@types/bun": "latest"
   },
   "keywords": ["bun", "rescript", "rest", "api", "zero-dependency", "minimal"],
   "author": "Gheorghita Cristea",
-  "license": "MIT"
+  "license": "MIT",
+  "engines": {
+    "bun": "1.1.0"
+  }
 }

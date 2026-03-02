@@ -44,3 +44,4 @@ bun-debug.log*
 # OS
 Thumbs.db
 .DS_Store
+lib
