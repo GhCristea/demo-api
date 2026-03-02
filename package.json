@@ -13,21 +13,16 @@
     "start":      "bun dist/index.js",
     "test":       "bun test",
     "test:watch": "bun test --watch",
-    "db:migrate": "bun db/migrate.js",
-    "db:seed":    "bun db/seed.js"
+    "db:migrate": "bun db/migrate.js"
   },
   "dependencies": {
-    "bun": "latest",
-    "rescript": "^12.2.0 ",
+    "rescript": "^12.2.0",
     "rescript-schema": "^9.3.4"
-  },
-  "devDependencies": {
-    "@types/bun": "latest"
   },
   "keywords": ["bun", "rescript", "rest", "api", "zero-dependency", "minimal"],
   "author": "Gheorghita Cristea",
   "license": "MIT",
   "engines": {
-    "bun": "1.1.0"
+    "bun": ">=1.1.0"
   }
 }
