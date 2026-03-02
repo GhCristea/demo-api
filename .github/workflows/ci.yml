@@ -2,31 +2,27 @@ name: CI
 
 on:
   push:
-    branches:
-      - main
+    branches: [main, "migration/*"]
   pull_request:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
-      - name: Use Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: "24"
-          cache: "npm"
+          bun-version: latest
 
       - name: Install dependencies
-        run: npm ci
+        run: bun install --frozen-lockfile
 
-      - name: Run lint
-        run: npm run lint
+      - name: Build (ReScript compile + typecheck)
+        run: bun run build
 
-      - name: Run typecheck
-        run: npm run typecheck
+      - name: Run tests
+        run: bun test
